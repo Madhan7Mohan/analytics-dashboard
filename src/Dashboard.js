@@ -19,21 +19,11 @@ const unique = (data, key) => [...new Set(data.map(d => d[key]).filter(Boolean))
 /* ================= DASHBOARD ================= */
 const Dashboard = () => {
 
-  /* ========== TAB STATE ========== */
   const [activeTab, setActiveTab] = useState("EXCEL");
-
-  /* ========== EXCEL DATA ========== */
   const [excelData, setExcelData] = useState([]);
-
-  /* ========== MANUAL DATA ========== */
   const [manualData, setManualData] = useState([]);
-  const [manualEntry, setManualEntry] = useState({
-    year: "",
-    month: "",
-    count: ""
-  });
+  const [manualEntry, setManualEntry] = useState({ year: "", month: "", count: "" });
 
-  /* ========== FILTERS (EXCEL) ========== */
   const [filters, setFilters] = useState({
     course: "ALL",
     branch: "ALL",
@@ -42,7 +32,6 @@ const Dashboard = () => {
     status: "ALL"
   });
 
-  /* ========== REFS FOR DOWNLOAD ========== */
   const manualChartRef = useRef(null);
 
   /* ================= EXCEL UPLOAD ================= */
@@ -67,7 +56,6 @@ const Dashboard = () => {
     reader.readAsBinaryString(file);
   };
 
-  /* ================= FILTERED EXCEL DATA ================= */
   const filteredExcelData = useMemo(() => {
     return excelData.filter(r =>
       (filters.course === "ALL" || r.course === filters.course) &&
@@ -78,12 +66,10 @@ const Dashboard = () => {
     );
   }, [excelData, filters]);
 
-  /* ================= KPIs ================= */
   const totalStudents = filteredExcelData.length;
   const totalOffers = filteredExcelData.filter(r => r.status === "OFFERED").length;
   const totalRevenue = filteredExcelData.reduce((s, r) => s + r.paidAmount, 0);
 
-  /* ================= BATCH-WISE COUNT ================= */
   const batchCounts = useMemo(() => {
     const map = {};
     filteredExcelData.forEach(r => {
@@ -92,7 +78,6 @@ const Dashboard = () => {
     return Object.entries(map).map(([batch, count]) => ({ batch, count }));
   }, [filteredExcelData]);
 
-  /* ================= MANUAL ENTRY ================= */
   const addManualEntry = () => {
     if (!manualEntry.year || !manualEntry.month || !manualEntry.count) return;
 
@@ -108,7 +93,6 @@ const Dashboard = () => {
     setManualEntry({ year: "", month: "", count: "" });
   };
 
-  /* ================= YEAR-WISE MANUAL CHART ================= */
   const years = [...new Set(manualData.map(d => d.year))];
 
   const yearChartData = MONTHS.map(m => {
@@ -121,7 +105,6 @@ const Dashboard = () => {
     return row;
   });
 
-  /* ================= DOWNLOAD PDF ================= */
   const downloadManualCharts = async () => {
     const canvas = await html2canvas(manualChartRef.current, { scale: 2 });
     const imgData = canvas.toDataURL("image/png");
@@ -135,138 +118,156 @@ const Dashboard = () => {
     pdf.save("year-wise-analysis.pdf");
   };
 
-  /* ================= UI ================= */
   return (
-    <div style={{ padding: "20px" }}>
-      <h2>📊 Analytics Dashboard</h2>
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
 
-      {/* ================= TABS ================= */}
-      <div style={{ marginBottom: "20px" }}>
-        <button onClick={() => setActiveTab("EXCEL")}>
-          Excel Analytics
-        </button>
-        <button onClick={() => setActiveTab("MANUAL")} style={{ marginLeft: "10px" }}>
-          Manual Analytics
-        </button>
-      </div>
+      {/* ================= HEADER ================= */}
+      <header style={{
+        background: "#0f172a",
+        color: "#ffffff",
+        padding: "14px 20px",
+        fontSize: "20px",
+        fontWeight: "bold"
+      }}>
+        ThopsTech Career Solutions
+      </header>
 
-      {/* ================= EXCEL TAB ================= */}
-      {activeTab === "EXCEL" && (
-        <>
-          <h3>Upload Excel (Student Data)</h3>
-          <input type="file" onChange={e => handleUpload(e.target.files[0])} />
+      {/* ================= MAIN ================= */}
+      <main style={{ flex: 1, padding: "20px" }}>
+        <h2>ThopsTech Analytics Dashboard</h2>
 
-          {/* FILTERS */}
-          <div style={{ display: "flex", gap: "10px", margin: "15px 0" }}>
-            <select onChange={e => setFilters({ ...filters, course: e.target.value })}>
-              <option value="ALL">All Courses</option>
-              {unique(excelData, "course").map(v => <option key={v}>{v}</option>)}
-            </select>
-
-            <select onChange={e => setFilters({ ...filters, branch: e.target.value })}>
-              <option value="ALL">All Branches</option>
-              {unique(excelData, "branch").map(v => <option key={v}>{v}</option>)}
-            </select>
-
-            <select onChange={e => setFilters({ ...filters, batch: e.target.value })}>
-              <option value="ALL">All Batches</option>
-              {unique(excelData, "batch").map(v => <option key={v}>{v}</option>)}
-            </select>
-
-            <select onChange={e => setFilters({ ...filters, yop: e.target.value })}>
-              <option value="ALL">All YOP</option>
-              {unique(excelData, "yop").map(v => <option key={v}>{v}</option>)}
-            </select>
-
-            <select onChange={e => setFilters({ ...filters, status: e.target.value })}>
-              <option value="ALL">All Status</option>
-              {unique(excelData, "status").map(v => <option key={v}>{v}</option>)}
-            </select>
-          </div>
-
-          {/* KPIs */}
-          <div style={{ display: "flex", gap: "20px", marginBottom: "20px" }}>
-            <Kpi title="Total Students" value={totalStudents} />
-            <Kpi title="Total Offers" value={totalOffers} />
-            <Kpi title="Total Revenue" value={`₹${totalRevenue}`} />
-          </div>
-
-          {/* BATCH BAR */}
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={batchCounts}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="batch" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="count" fill="#6366f1" />
-            </BarChart>
-          </ResponsiveContainer>
-        </>
-      )}
-
-      {/* ================= MANUAL TAB ================= */}
-      {activeTab === "MANUAL" && (
-        <>
-          <h3>Manual Entry (Year – Month – Count)</h3>
-
-          <div style={{ marginBottom: "20px" }}>
-            <input
-              placeholder="Year"
-              value={manualEntry.year}
-              onChange={e => setManualEntry({ ...manualEntry, year: e.target.value })}
-            />
-            <select
-              value={manualEntry.month}
-              onChange={e => setManualEntry({ ...manualEntry, month: e.target.value })}
-            >
-              <option value="">Month</option>
-              {MONTHS.map(m => <option key={m}>{m}</option>)}
-            </select>
-            <input
-              type="number"
-              placeholder="Count"
-              value={manualEntry.count}
-              onChange={e => setManualEntry({ ...manualEntry, count: e.target.value })}
-            />
-            <button onClick={addManualEntry}>Add</button>
-          </div>
-
-          <button onClick={downloadManualCharts}>
-            Download Bar + Line Graph
+        <div style={{ marginBottom: "20px" }}>
+          <button onClick={() => setActiveTab("EXCEL")}>Excel Analytics</button>
+          <button onClick={() => setActiveTab("MANUAL")} style={{ marginLeft: "10px" }}>
+            Manual Analytics
           </button>
+        </div>
 
-          <div ref={manualChartRef}>
+        {activeTab === "EXCEL" && (
+          <>
+            <h3>Upload Excel (Student Data)</h3>
+            <input type="file" onChange={e => handleUpload(e.target.files[0])} />
+
+            <div style={{ display: "flex", gap: "10px", margin: "15px 0" }}>
+              <select onChange={e => setFilters({ ...filters, course: e.target.value })}>
+                <option value="ALL">All Courses</option>
+                {unique(excelData, "course").map(v => <option key={v}>{v}</option>)}
+              </select>
+
+              <select onChange={e => setFilters({ ...filters, branch: e.target.value })}>
+                <option value="ALL">All Branches</option>
+                {unique(excelData, "branch").map(v => <option key={v}>{v}</option>)}
+              </select>
+
+              <select onChange={e => setFilters({ ...filters, batch: e.target.value })}>
+                <option value="ALL">All Batches</option>
+                {unique(excelData, "batch").map(v => <option key={v}>{v}</option>)}
+              </select>
+
+              <select onChange={e => setFilters({ ...filters, yop: e.target.value })}>
+                <option value="ALL">All YOP</option>
+                {unique(excelData, "yop").map(v => <option key={v}>{v}</option>)}
+              </select>
+
+              <select onChange={e => setFilters({ ...filters, status: e.target.value })}>
+                <option value="ALL">All Status</option>
+                {unique(excelData, "status").map(v => <option key={v}>{v}</option>)}
+              </select>
+            </div>
+
+            <div style={{ display: "flex", gap: "20px", marginBottom: "20px" }}>
+              <Kpi title="Total Students" value={totalStudents} />
+              <Kpi title="Total Offers" value={totalOffers} />
+              <Kpi title="Total Revenue" value={`₹${totalRevenue}`} />
+            </div>
+
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={yearChartData}>
+              <BarChart data={batchCounts}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
+                <XAxis dataKey="batch" />
                 <YAxis />
                 <Tooltip />
-                {years.map((y, i) => (
-                  <Bar key={y} dataKey={y} fill={COLORS[i % COLORS.length]} />
-                ))}
+                <Bar dataKey="count" fill="#6366f1" />
               </BarChart>
             </ResponsiveContainer>
+          </>
+        )}
 
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={yearChartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                {years.map((y, i) => (
-                  <Line
-                    key={y}
-                    dataKey={y}
-                    stroke={COLORS[i % COLORS.length]}
-                    strokeWidth={2}
-                  />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </>
-      )}
+        {activeTab === "MANUAL" && (
+          <>
+            <h3>Manual Entry (Year – Month – Count)</h3>
+
+            <div style={{ marginBottom: "20px" }}>
+              <input
+                placeholder="Year"
+                value={manualEntry.year}
+                onChange={e => setManualEntry({ ...manualEntry, year: e.target.value })}
+              />
+              <select
+                value={manualEntry.month}
+                onChange={e => setManualEntry({ ...manualEntry, month: e.target.value })}
+              >
+                <option value="">Month</option>
+                {MONTHS.map(m => <option key={m}>{m}</option>)}
+              </select>
+              <input
+                type="number"
+                placeholder="Count"
+                value={manualEntry.count}
+                onChange={e => setManualEntry({ ...manualEntry, count: e.target.value })}
+              />
+              <button onClick={addManualEntry}>Add</button>
+            </div>
+
+            <button onClick={downloadManualCharts}>
+              Download Bar + Line Graph
+            </button>
+
+            <div ref={manualChartRef}>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={yearChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip />
+                  {years.map((y, i) => (
+                    <Bar key={y} dataKey={y} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={yearChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip />
+                  {years.map((y, i) => (
+                    <Line
+                      key={y}
+                      dataKey={y}
+                      stroke={COLORS[i % COLORS.length]}
+                      strokeWidth={2}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </>
+        )}
+      </main>
+
+      {/* ================= FOOTER ================= */}
+      <footer style={{
+        background: "#f1f5f9",
+        textAlign: "center",
+        padding: "10px",
+        fontSize: "14px",
+        color: "#475569"
+      }}>
+        © All rights reserved
+      </footer>
+
     </div>
   );
 };
