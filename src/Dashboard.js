@@ -143,7 +143,7 @@ function parseExcelFile(file) {
 }
 
 /* ═══════════ SHARED UI ═══════════ */
-const Tooltip_ = ({ active, payload, label }) => {
+const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
     <div style={{background:"rgba(255,255,255,0.98)",border:"1px solid rgba(15,23,42,0.10)",
@@ -581,7 +581,7 @@ export default function Dashboard() {
                       <BarChart data={yearData} barGap={4} barCategoryGap="28%">
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
                         <XAxis dataKey="year" {...ax}/><YAxis {...ax}/>
-                        <Tooltip content={<Tooltip_/>}/>
+                        <Tooltip content={<CustomTooltip/>}/>
                         <Legend wrapperStyle={{color:"#94a3b8",fontSize:12,paddingTop:12}}/>
                         <Bar dataKey="totalStudents" name="Total Students" fill={C.indigo}  radius={[5,5,0,0]}/>
                         <Bar dataKey="offered"       name="Placed"         fill={C.emerald} radius={[5,5,0,0]}/>
@@ -600,7 +600,7 @@ export default function Dashboard() {
                         <LineChart data={monthlyData}>
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
                           <XAxis dataKey="month" {...ax}/><YAxis {...ax}/>
-                          <Tooltip content={<Tooltip_/>}/>
+                          <Tooltip content={<CustomTooltip/>}/>
                           <Legend wrapperStyle={{color:"#94a3b8",fontSize:12,paddingTop:12}}/>
                           {allYears.map((y,i)=>(
                             <Line key={y} type="monotone" dataKey={`s_${y}`} name={y}
@@ -617,7 +617,7 @@ export default function Dashboard() {
                         <BarChart data={monthlyData} barGap={2} barCategoryGap="22%">
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
                           <XAxis dataKey="month" {...ax}/><YAxis {...ax}/>
-                          <Tooltip content={<Tooltip_/>}/>
+                          <Tooltip content={<CustomTooltip/>}/>
                           <Legend wrapperStyle={{color:"#94a3b8",fontSize:12,paddingTop:12}}/>
                           {allYears.map((y,i)=>(
                             <Bar key={y} dataKey={`o_${y}`} name={y} fill={PALETTE[i%PALETTE.length]} radius={[4,4,0,0]}/>
@@ -641,7 +641,7 @@ export default function Dashboard() {
                               labelLine={{stroke:"rgba(255,255,255,0.15)"}}>
                               {statusData.map((d,i)=><Cell key={i} fill={d.color}/>)}
                             </Pie>
-                            <Tooltip content={<Tooltip_/>}/>
+                            <Tooltip content={<CustomTooltip/>}/>
                           </PieChart>
                         </ResponsiveContainer>
                       </Card>
@@ -656,14 +656,14 @@ export default function Dashboard() {
                               labelLine={{stroke:"rgba(255,255,255,0.15)"}}>
                               {genderData.map((d,i)=><Cell key={i} fill={d.color}/>)}
                             </Pie>
-                            <Tooltip content={<Tooltip_/>}/>
+                            <Tooltip content={<CustomTooltip/>}/>
                           </PieChart>
                         </ResponsiveContainer>
                         <ResponsiveContainer width="100%" height={120}>
                           <BarChart data={yearData} barCategoryGap="40%">
                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
                             <XAxis dataKey="year" {...ax}/><YAxis {...ax}/>
-                            <Tooltip content={<Tooltip_/>}/>
+                            <Tooltip content={<CustomTooltip/>}/>
                             <Bar dataKey="male"   name="Male"   stackId="g" fill={C.sky}  radius={[0,0,3,3]}/>
                             <Bar dataKey="female" name="Female" stackId="g" fill={C.pink} radius={[3,3,0,0]}/>
                           </BarChart>
@@ -681,7 +681,7 @@ export default function Dashboard() {
                         <BarChart data={yearData} barCategoryGap="30%">
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
                           <XAxis dataKey="year" {...ax}/><YAxis {...ax}/>
-                          <Tooltip content={<Tooltip_/>}/>
+                          <Tooltip content={<CustomTooltip/>}/>
                           <Legend wrapperStyle={{color:"#94a3b8",fontSize:12}}/>
                           <Bar dataKey="javaFS"   name="Java Full Stack"   fill={C.orange} radius={[5,5,0,0]}/>
                           <Bar dataKey="pythonFS" name="Python Full Stack" fill={C.teal}   radius={[5,5,0,0]}/>
@@ -720,7 +720,7 @@ export default function Dashboard() {
                             fillOpacity={0.1} strokeWidth={2}/>
                         ))}
                         <Legend wrapperStyle={{color:"#94a3b8",fontSize:12}}/>
-                        <Tooltip content={<Tooltip_/>}/>
+                        <Tooltip content={<CustomTooltip/>}/>
                       </RadarChart>
                     </ResponsiveContainer>
                   </Card>
@@ -752,7 +752,7 @@ export default function Dashboard() {
                         <BarChart data={mRows} barCategoryGap="30%">
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
                           <XAxis dataKey="month" {...ax}/><YAxis {...ax}/>
-                          <Tooltip content={<Tooltip_/>}/>
+                          <Tooltip content={<CustomTooltip/>}/>
                           <Legend wrapperStyle={{color:"#94a3b8",fontSize:11,paddingTop:8}}/>
                           <Bar dataKey="totalStudents" name="Students"   fill={color}     radius={[4,4,0,0]}/>
                           <Bar dataKey="offered"       name="Placed"     fill={C.emerald} radius={[4,4,0,0]}/>
@@ -812,7 +812,7 @@ export default function Dashboard() {
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
                       <XAxis dataKey="year" {...ax}/>
                       <YAxis {...ax} tickFormatter={v=>`₹${(v/1e5).toFixed(0)}L`}/>
-                      <Tooltip content={<Tooltip_/>}/>
+                      <Tooltip content={<Tooltip/>}/>
                       <Legend wrapperStyle={{color:"#94a3b8",fontSize:12,paddingTop:12}}/>
                       <Bar dataKey="revenue" name="Revenue Collected" fill={C.amber}   radius={[5,5,0,0]}/>
                       <Bar dataKey="pending" name="Pending"           fill={C.rose}    radius={[5,5,0,0]}/>
@@ -837,7 +837,7 @@ export default function Dashboard() {
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
                       <XAxis dataKey="year" {...ax}/>
                       <YAxis {...ax} tickFormatter={v=>`₹${(v/1e5).toFixed(0)}L`}/>
-                      <Tooltip content={<Tooltip_/>}/>
+                      <Tooltip content={<Tooltip/>}/>
                       <Legend wrapperStyle={{color:"#94a3b8",fontSize:12,paddingTop:12}}/>
                       <Area type="monotone" dataKey="revenue" name="Revenue" stroke={C.amber} fill="url(#gRev)" strokeWidth={3} dot={{fill:C.amber,r:5,strokeWidth:0}}/>
                       <Area type="monotone" dataKey="pending" name="Pending" stroke={C.rose}  fill="url(#gPen)" strokeWidth={2} dot={{fill:C.rose, r:4,strokeWidth:0}}/>
@@ -860,7 +860,7 @@ export default function Dashboard() {
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
                       <XAxis dataKey="month" {...ax}/>
                       <YAxis {...ax} tickFormatter={v=>`₹${(v/1e5).toFixed(0)}L`}/>
-                      <Tooltip content={<Tooltip_/>}/>
+                      <Tooltip content={<Tooltip/>}/>
                       <Legend wrapperStyle={{color:"#94a3b8",fontSize:12,paddingTop:12}}/>
                       {allYears.map((y,i)=>(
                         <Area key={y} type="monotone" dataKey={`r_${y}`} name={`${y} Revenue`}
@@ -878,7 +878,7 @@ export default function Dashboard() {
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
                       <XAxis dataKey="month" {...ax}/>
                       <YAxis {...ax} tickFormatter={v=>`₹${(v/1e5).toFixed(0)}L`}/>
-                      <Tooltip content={<Tooltip_/>}/>
+                      <Tooltip content={<Tooltip/>}/>
                       <Legend wrapperStyle={{color:"#94a3b8",fontSize:12,paddingTop:12}}/>
                       {allYears.map((y,i)=>(
                         <Line key={y} type="monotone" dataKey={`p_${y}`} name={`${y} Pending`}
@@ -897,7 +897,7 @@ export default function Dashboard() {
                   const collRate=(yd.revenue+yd.pending)>0?((yd.revenue/(yd.revenue+yd.pending))*100).toFixed(1):0;
                   return (
                     <Card key={yd.year} title={`${yd.year} — Financial Breakdown`}
-                      accent={C.amber} badge={fmtMoney(yd.revenue)+" collected"}>
+                      accent={color} badge={fmtMoney(yd.revenue)+" collected"}>
                       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:16}}>
                         {[
                           {l:"Revenue",     v:fmtMoney(yd.revenue), c:C.amber},
@@ -917,7 +917,7 @@ export default function Dashboard() {
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
                           <XAxis dataKey="month" {...ax}/>
                           <YAxis {...ax} tickFormatter={v=>`₹${(v/1e5).toFixed(0)}L`}/>
-                          <Tooltip content={<Tooltip_/>}/>
+                          <Tooltip content={<CustomTooltip/>}/>
                           <Legend wrapperStyle={{color:"#94a3b8",fontSize:11,paddingTop:8}}/>
                           <Bar dataKey="totalPaid"    name="Collected" fill={C.amber} radius={[4,4,0,0]}/>
                           <Bar dataKey="totalPending" name="Pending"   fill={C.rose}  radius={[4,4,0,0]}/>
@@ -981,7 +981,7 @@ export default function Dashboard() {
                     <BarChart data={manualChart} barGap={3} barCategoryGap="22%">
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
                       <XAxis dataKey="month" {...ax}/><YAxis {...ax}/>
-                      <Tooltip content={<Tooltip_/>}/>
+                      <Tooltip content={<Tooltip/>}/>
                       <Legend wrapperStyle={{color:"#94a3b8",fontSize:12,paddingTop:12}}/>
                       {manualYears.map((y,i)=>(
                         <Bar key={y} dataKey={y} name={y} fill={PALETTE[i%PALETTE.length]} radius={[5,5,0,0]}/>
@@ -995,7 +995,7 @@ export default function Dashboard() {
                     <LineChart data={manualChart}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
                       <XAxis dataKey="month" {...ax}/><YAxis {...ax}/>
-                      <Tooltip content={<Tooltip_/>}/>
+                      <Tooltip content={<Tooltip/>}/>
                       <Legend wrapperStyle={{color:"#94a3b8",fontSize:12,paddingTop:12}}/>
                       {manualYears.map((y,i)=>(
                         <Line key={y} type="monotone" dataKey={y} name={y}
@@ -1020,7 +1020,7 @@ export default function Dashboard() {
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
                       <XAxis dataKey="month" {...ax}/><YAxis {...ax}/>
-                      <Tooltip content={<Tooltip_/>}/>
+                      <Tooltip content={<Tooltip/>}/>
                       <Legend wrapperStyle={{color:"#94a3b8",fontSize:12,paddingTop:12}}/>
                       {manualYears.map((y,i)=>(
                         <Area key={y} type="monotone" dataKey={y} name={y}
