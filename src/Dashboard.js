@@ -4,7 +4,8 @@ import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, Legend, CartesianGrid,
   ResponsiveContainer, AreaChart, Area, RadarChart,
-  Radar, PolarGrid, PolarAngleAxis, ComposedChart
+  Radar, PolarGrid, PolarAngleAxis, ComposedChart,
+  ScatterChart, Scatter
 } from "recharts";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -34,8 +35,7 @@ const fmtMoney = n => {
 };
 
 /* ═══════════════════════════════════════
-   PARSER — stops at TOTAL row to avoid
-   reading the annual breakdown block
+   PARSER
 ═══════════════════════════════════════ */
 function parseExcelFile(file) {
   return new Promise((resolve, reject) => {
@@ -50,7 +50,6 @@ function parseExcelFile(file) {
           const ws  = wb.Sheets[sheetName];
           const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
 
-          // Find header row containing "Total Students"
           let hdrIdx = -1;
           for (let i = 0; i < Math.min(raw.length, 12); i++) {
             if (raw[i].map(c => String(c).trim()).includes("Total Students")) {
@@ -90,7 +89,6 @@ function parseExcelFile(file) {
             if (!row) continue;
             const cell0 = String(row[0]||"").trim().toUpperCase();
 
-            // Hard stop — everything after TOTAL row is summary data, not monthly rows
             if (cell0 === "TOTAL" || cell0.startsWith("ANNUAL") || cell0 === "" || cell0 === "NAN") break;
             if (cell0 === "YEAR") continue;
 
@@ -140,6 +138,253 @@ function parseExcelFile(file) {
     };
     reader.readAsBinaryString(file);
   });
+}
+
+/* ═══════════════════════════════════════
+   ML ANALYTICS ENGINE
+═══════════════════════════════════════ */
+class MLAnalytics {
+  constructor(data) {
+    this.data = data;
+    this.models = {};
+  }
+
+  // Prepare time series data
+  prepareTimeSeries(field) {
+    const sorted = [...this.data].sort((a, b) => {
+      if (a.year !== b.year) return a.year.localeCompare(b.year);
+      return MONTHS.indexOf(a.month) - MONTHS.indexOf(b.month);
+    });
+    return sorted.map(d => d[field] || 0);
+  }
+
+  // Linear Regression using Least Squares Method
+  async linearRegression(field, futureMonths = 3) {
+    const values = this.prepareTimeSeries(field);
+    if (values.length < 3) return null;
+
+    const n = values.length;
+    let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+
+    for (let i = 0; i < n; i++) {
+      sumX += i;
+      sumY += values[i];
+      sumXY += i * values[i];
+      sumX2 += i * i;
+    }
+
+    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+
+    const predictions = [];
+    for (let i = 0; i < futureMonths; i++) {
+      const x = n + i;
+      const pred = slope * x + intercept;
+      predictions.push(Math.max(0, Math.round(pred)));
+    }
+
+    return predictions;
+  }
+
+  // Moving Average
+  movingAverage(field, window = 3) {
+    const values = this.prepareTimeSeries(field);
+    if (values.length < window) return null;
+
+    const ma = [];
+    for (let i = window - 1; i < values.length; i++) {
+      const sum = values.slice(i - window + 1, i + 1).reduce((a, b) => a + b, 0);
+      ma.push(sum / window);
+    }
+    return ma;
+  }
+
+  // Exponential Smoothing
+  exponentialSmoothing(field, alpha = 0.3, futureMonths = 3) {
+    const values = this.prepareTimeSeries(field);
+    if (values.length < 2) return null;
+
+    let forecast = values[0];
+    const smoothed = [forecast];
+
+    for (let i = 1; i < values.length; i++) {
+      forecast = alpha * values[i] + (1 - alpha) * forecast;
+      smoothed.push(forecast);
+    }
+
+    const predictions = [];
+    for (let i = 0; i < futureMonths; i++) {
+      predictions.push(Math.max(0, Math.round(forecast)));
+    }
+
+    return { smoothed, predictions };
+  }
+
+  // Polynomial Regression (degree 2)
+  polynomialRegression(field, futureMonths = 3) {
+    const values = this.prepareTimeSeries(field);
+    if (values.length < 4) return null;
+
+    const n = values.length;
+    let sumX = 0, sumX2 = 0, sumX3 = 0, sumX4 = 0;
+    let sumY = 0, sumXY = 0, sumX2Y = 0;
+
+    for (let i = 0; i < n; i++) {
+      const x = i;
+      const y = values[i];
+      sumX += x;
+      sumX2 += x * x;
+      sumX3 += x * x * x;
+      sumX4 += x * x * x * x;
+      sumY += y;
+      sumXY += x * y;
+      sumX2Y += x * x * y;
+    }
+
+    const denom = n * sumX2 * sumX4 + 2 * sumX * sumX2 * sumX3 - 
+                  sumX2 * sumX2 * sumX2 - n * sumX3 * sumX3 - sumX * sumX * sumX4;
+    
+    if (Math.abs(denom) < 1e-10) return null;
+
+    const a = (sumY * sumX2 * sumX4 + sumX * sumX2Y * sumX3 + sumXY * sumX2 * sumX3 -
+               sumX2 * sumX2Y * sumX2 - sumY * sumX3 * sumX3 - sumXY * sumX * sumX4) / denom;
+    const b = (n * sumXY * sumX4 + sumX * sumX2Y * sumX2 + sumY * sumX2 * sumX3 -
+               sumX2 * sumXY * sumX2 - n * sumX2Y * sumX3 - sumY * sumX * sumX4) / denom;
+    const c = (n * sumX2 * sumX2Y + sumX * sumXY * sumX3 + sumY * sumX * sumX2 -
+               sumX2 * sumXY * sumX - n * sumX3 * sumY - sumX * sumX * sumX2Y) / denom;
+
+    const predictions = [];
+    for (let i = 0; i < futureMonths; i++) {
+      const x = n + i;
+      const pred = a + b * x + c * x * x;
+      predictions.push(Math.max(0, Math.round(pred)));
+    }
+
+    return predictions;
+  }
+
+  // Seasonal Decomposition
+  seasonalPattern(field) {
+    const values = this.prepareTimeSeries(field);
+    if (values.length < 12) return null;
+
+    const monthlyAvg = new Array(12).fill(0);
+    const monthlyCount = new Array(12).fill(0);
+
+    this.data.forEach(d => {
+      const monthIdx = MONTHS.indexOf(d.month);
+      if (monthIdx !== -1) {
+        monthlyAvg[monthIdx] += d[field] || 0;
+        monthlyCount[monthIdx]++;
+      }
+    });
+
+    const seasonality = monthlyAvg.map((sum, i) => 
+      monthlyCount[i] > 0 ? sum / monthlyCount[i] : 0
+    );
+
+    return seasonality;
+  }
+
+  // Growth Rate Analysis
+  growthAnalysis(field) {
+    const values = this.prepareTimeSeries(field);
+    if (values.length < 2) return null;
+
+    const growthRates = [];
+    for (let i = 1; i < values.length; i++) {
+      if (values[i - 1] > 0) {
+        growthRates.push(((values[i] - values[i - 1]) / values[i - 1]) * 100);
+      }
+    }
+
+    const avgGrowth = growthRates.reduce((a, b) => a + b, 0) / growthRates.length;
+    const maxGrowth = Math.max(...growthRates);
+    const minGrowth = Math.min(...growthRates);
+
+    return {
+      avgGrowth: avgGrowth.toFixed(2),
+      maxGrowth: maxGrowth.toFixed(2),
+      minGrowth: minGrowth.toFixed(2),
+      trend: avgGrowth > 5 ? "Strong Growth" : avgGrowth > 0 ? "Moderate Growth" : 
+             avgGrowth > -5 ? "Declining" : "Sharp Decline"
+    };
+  }
+
+  // Correlation Analysis
+  correlation(field1, field2) {
+    const values1 = this.prepareTimeSeries(field1);
+    const values2 = this.prepareTimeSeries(field2);
+    
+    if (values1.length !== values2.length || values1.length < 2) return null;
+
+    const n = values1.length;
+    const mean1 = values1.reduce((a, b) => a + b, 0) / n;
+    const mean2 = values2.reduce((a, b) => a + b, 0) / n;
+
+    let num = 0, den1 = 0, den2 = 0;
+    for (let i = 0; i < n; i++) {
+      const diff1 = values1[i] - mean1;
+      const diff2 = values2[i] - mean2;
+      num += diff1 * diff2;
+      den1 += diff1 * diff1;
+      den2 += diff2 * diff2;
+    }
+
+    const corr = num / Math.sqrt(den1 * den2);
+    return isNaN(corr) ? 0 : corr;
+  }
+
+  // Anomaly Detection
+  detectAnomalies(field, threshold = 2) {
+    const values = this.prepareTimeSeries(field);
+    if (values.length < 3) return [];
+
+    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / values.length;
+    const stdDev = Math.sqrt(variance);
+
+    const anomalies = [];
+    this.data.forEach((d, i) => {
+      const value = d[field] || 0;
+      const zScore = Math.abs((value - mean) / stdDev);
+      if (zScore > threshold) {
+        anomalies.push({
+          yearMonth: d.yearMonth,
+          value,
+          zScore: zScore.toFixed(2),
+          deviation: ((value - mean) / mean * 100).toFixed(1)
+        });
+      }
+    });
+
+    return anomalies;
+  }
+
+  // Ensemble Prediction (combines multiple models)
+  ensemblePrediction(field, futureMonths = 3) {
+    const linear = this.linearRegression(field, futureMonths);
+    const poly = this.polynomialRegression(field, futureMonths);
+    const expSmooth = this.exponentialSmoothing(field, 0.3, futureMonths);
+
+    const predictions = [];
+    for (let i = 0; i < futureMonths; i++) {
+      const vals = [
+        linear?.[i],
+        poly?.[i],
+        expSmooth?.predictions?.[i]
+      ].filter(v => v != null);
+
+      if (vals.length > 0) {
+        const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+        predictions.push(Math.max(0, Math.round(avg)));
+      } else {
+        predictions.push(0);
+      }
+    }
+
+    return predictions;
+  }
 }
 
 /* ═══════════ SHARED UI ═══════════ */
@@ -205,72 +450,144 @@ const Card = ({ title, accent="#6366f1", badge, children }) => (
 
 const ax = { tick:{fill:"#475569",fontSize:11}, axisLine:{stroke:"#1e293b"}, tickLine:false };
 
-const predictEnrollmentStrength = (historicalData, timeHorizon = 3) => {
-  if (!historicalData || historicalData.length < 3) {
-    return { prediction: 45, confidence: 0.65, trend: "insufficient_data" };
-  }
-
-  const recent = historicalData.slice(-12);
-  const growthRates = [];
-  for (let i = 1; i < recent.length; i++) {
-    const prev = Number(recent[i - 1]?.totalStudents || 0);
-    const cur = Number(recent[i]?.totalStudents || 0);
-    if (prev > 0) growthRates.push((cur - prev) / prev);
-  }
-  const avgGrowth = growthRates.length ? growthRates.reduce((s, r) => s + r, 0) / growthRates.length : 0;
-  const last = recent[recent.length - 1];
-  const base = Number(last?.totalStudents || 0) * (1 + avgGrowth * timeHorizon);
-
-  return {
-    prediction: Math.max(0, Math.round(base)),
-    confidence: Math.min(0.893, 0.6 + (historicalData.length / 24) * 0.3),
-    trend: avgGrowth > 0.05 ? "growing" : avgGrowth < -0.05 ? "declining" : "stable",
-  };
-};
-
+/* ═══════════════════════════════════════
+   ENHANCED AI CHATBOT WITH ML
+═══════════════════════════════════════ */
 const BUBUChatbot = ({ data, isVisible, onClose }) => {
   const [messages, setMessages] = useState([
-    { sender: "BUBU", text: "Hi, I’m BUBU. Ask me: predict student strength.", timestamp: Date.now() },
+    { sender: "BUBU", text: "Hi! I'm BUBU, your AI analytics assistant. I can:\n\n• Predict future student enrollment\n• Analyze growth trends\n• Detect anomalies\n• Show correlations\n• Forecast revenue\n• Provide seasonal insights\n\nAsk me anything!", timestamp: Date.now() },
   ]);
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const endRef = useRef(null);
+  const mlEngine = useMemo(() => data.length > 0 ? new MLAnalytics(data) : null, [data]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  const replyFor = async (text) => {
-    const t = String(text || "").toLowerCase();
-    if (t.includes("predict") || t.includes("strength") || t.includes("student") || t.includes("enroll")) {
-      const p = predictEnrollmentStrength(data, 3);
-      return `Prediction (next 3 months): ${p.prediction} students\nConfidence: ${(p.confidence * 100).toFixed(1)}%\nTrend: ${p.trend}`;
+  const replyFor = (text) => {
+    if (!mlEngine) return "Please upload data first in the Analytics tab.";
+    
+    const t = text.toLowerCase();
+
+    // Student enrollment predictions
+    if (t.includes("predict") && (t.includes("student") || t.includes("enroll"))) {
+      const months = t.match(/(\d+)\s*month/i)?.[1] || "3";
+      const predictions = mlEngine.ensemblePrediction("totalStudents", parseInt(months));
+      const growth = mlEngine.growthAnalysis("totalStudents");
+      
+      return `📊 STUDENT ENROLLMENT FORECAST (Next ${months} months):\n\n${predictions.map((p, i) => `Month ${i+1}: ${fmt(p)} students`).join('\n')}\n\n📈 Trend: ${growth.trend}\nAvg Growth: ${growth.avgGrowth}%\nModel: Ensemble (Linear + Polynomial + Exp Smoothing)`;
     }
-    return "Ask me: predict student strength";
+
+    // Revenue predictions
+    if (t.includes("predict") && (t.includes("revenue") || t.includes("income") || t.includes("money"))) {
+      const months = t.match(/(\d+)\s*month/i)?.[1] || "3";
+      const predictions = mlEngine.ensemblePrediction("totalPaid", parseInt(months));
+      const growth = mlEngine.growthAnalysis("totalPaid");
+      
+      return `💰 REVENUE FORECAST (Next ${months} months):\n\n${predictions.map((p, i) => `Month ${i+1}: ${fmtMoney(p)}`).join('\n')}\n\n📈 Trend: ${growth.trend}\nAvg Growth: ${growth.avgGrowth}%`;
+    }
+
+    // Growth analysis
+    if (t.includes("growth") || t.includes("trend")) {
+      const field = t.includes("revenue") ? "totalPaid" : "totalStudents";
+      const growth = mlEngine.growthAnalysis(field);
+      const label = field === "totalPaid" ? "Revenue" : "Student";
+      
+      return `📈 ${label.toUpperCase()} GROWTH ANALYSIS:\n\nAvg Growth: ${growth.avgGrowth}%\nMax Growth: ${growth.maxGrowth}%\nMin Growth: ${growth.minGrowth}%\nTrend: ${growth.trend}`;
+    }
+
+    // Anomaly detection
+    if (t.includes("anomal") || t.includes("unusual") || t.includes("outlier")) {
+      const anomalies = mlEngine.detectAnomalies("totalStudents", 2);
+      
+      if (anomalies.length === 0) {
+        return "✅ No significant anomalies detected in student enrollment data.";
+      }
+      
+      return `⚠️ ANOMALIES DETECTED:\n\n${anomalies.slice(0, 5).map(a => 
+        `${a.yearMonth}: ${fmt(a.value)} students\nDeviation: ${a.deviation}%\nZ-Score: ${a.zScore}`
+      ).join('\n\n')}${anomalies.length > 5 ? `\n\n...and ${anomalies.length - 5} more` : ''}`;
+    }
+
+    // Seasonal patterns
+    if (t.includes("season") || t.includes("month")) {
+      const pattern = mlEngine.seasonalPattern("totalStudents");
+      if (!pattern) return "Not enough data for seasonal analysis (need 12+ months).";
+      
+      const maxMonth = MONTHS[pattern.indexOf(Math.max(...pattern))];
+      const minMonth = MONTHS[pattern.indexOf(Math.min(...pattern))];
+      
+      return `🗓️ SEASONAL PATTERNS:\n\nPeak Month: ${maxMonth} (${fmt(Math.round(Math.max(...pattern)))} avg)\nLowest Month: ${minMonth} (${fmt(Math.round(Math.min(...pattern)))} avg)\n\n${MONTHS.map((m, i) => `${m}: ${fmt(Math.round(pattern[i]))}`).join('\n')}`;
+    }
+
+    // Correlation analysis
+    if (t.includes("correlat") || t.includes("relationship")) {
+      const corr1 = mlEngine.correlation("totalStudents", "offered");
+      const corr2 = mlEngine.correlation("totalPaid", "totalStudents");
+      
+      return `🔗 CORRELATION ANALYSIS:\n\nStudents ↔ Placements: ${(corr1 * 100).toFixed(1)}%\n${corr1 > 0.7 ? "Strong positive correlation" : corr1 > 0.3 ? "Moderate correlation" : "Weak correlation"}\n\nRevenue ↔ Students: ${(corr2 * 100).toFixed(1)}%\n${corr2 > 0.7 ? "Strong positive correlation" : corr2 > 0.3 ? "Moderate correlation" : "Weak correlation"}`;
+    }
+
+    // Placement predictions
+    if (t.includes("placement") || t.includes("offer")) {
+      const months = t.match(/(\d+)\s*month/i)?.[1] || "3";
+      const predictions = mlEngine.ensemblePrediction("offered", parseInt(months));
+      
+      return `🤝 PLACEMENT FORECAST (Next ${months} months):\n\n${predictions.map((p, i) => `Month ${i+1}: ${fmt(p)} placements`).join('\n')}`;
+    }
+
+    // Course predictions
+    if (t.includes("java") || t.includes("python") || t.includes("course")) {
+      const javaPred = mlEngine.linearRegression("javaFS", 3);
+      const pythonPred = mlEngine.linearRegression("pythonFS", 3);
+      
+      return `📚 COURSE ENROLLMENT FORECAST (3 months):\n\nJava Full Stack:\n${javaPred?.map((p, i) => `Month ${i+1}: ${fmt(p)}`).join('\n') || 'Insufficient data'}\n\nPython Full Stack:\n${pythonPred?.map((p, i) => `Month ${i+1}: ${fmt(p)}`).join('\n') || 'Insufficient data'}`;
+    }
+
+    // Summary statistics
+    if (t.includes("summar") || t.includes("overview") || t.includes("stat")) {
+      const totalStudents = data.reduce((s, r) => s + r.totalStudents, 0);
+      const totalRevenue = data.reduce((s, r) => s + r.totalPaid, 0);
+      const totalPlaced = data.reduce((s, r) => s + r.offered, 0);
+      const growth = mlEngine.growthAnalysis("totalStudents");
+      
+      return `📊 QUICK SUMMARY:\n\nTotal Students: ${fmt(totalStudents)}\nTotal Placed: ${fmt(totalPlaced)}\nPlacement Rate: ${((totalPlaced/totalStudents)*100).toFixed(1)}%\nTotal Revenue: ${fmtMoney(totalRevenue)}\n\nGrowth Trend: ${growth.trend}\nAvg Growth: ${growth.avgGrowth}%`;
+    }
+
+    return "I can help with:\n• Predictions (students, revenue, placements)\n• Growth analysis\n• Anomaly detection\n• Seasonal patterns\n• Correlations\n• Course forecasts\n\nTry asking: 'Predict student enrollment for 6 months'";
   };
 
-  const handleSend = async () => {
+  const handleSend = () => {
     if (!inputValue.trim() || isTyping) return;
     const userText = inputValue;
     setInputValue("");
     setMessages((m) => [...m, { sender: "You", text: userText, timestamp: Date.now() }]);
     setIsTyping(true);
-    const botText = await replyFor(userText);
-    setMessages((m) => [...m, { sender: "BUBU", text: botText, timestamp: Date.now() }]);
-    setIsTyping(false);
+    
+    // Use setTimeout to simulate processing time
+    setTimeout(() => {
+      const botText = replyFor(userText);
+      setMessages((m) => [...m, { sender: "BUBU", text: botText, timestamp: Date.now() }]);
+      setIsTyping(false);
+    }, 500);
   };
 
   if (!isVisible) return null;
 
   return (
-    <div style={{ position: "fixed", bottom: 20, right: 20, width: 380, height: 520, zIndex: 9999,
+    <div style={{ position: "fixed", bottom: 20, right: 20, width: 420, height: 580, zIndex: 9999,
       background: "rgba(15,23,42,0.98)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 16,
       boxShadow: "0 24px 60px rgba(0,0,0,0.55)", display: "flex", flexDirection: "column" }}>
-      <div style={{ padding: "12px 14px", borderBottom: "1px solid rgba(255,255,255,0.08)",
+      <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)",
         display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ fontWeight: 800, color: "#e2e8f0", fontSize: 13 }}>BUBU AI</div>
+        <div>
+          <div style={{ fontWeight: 800, color: "#e2e8f0", fontSize: 14 }}>BUBU AI Analytics</div>
+          <div style={{ fontSize: 10, color: "#64748b" }}>Powered by ML Models</div>
+        </div>
         <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 10, border: "1px solid rgba(255,255,255,0.12)",
-          background: "rgba(255,255,255,0.06)", color: "#e2e8f0", cursor: "pointer" }}>×</button>
+          background: "rgba(255,255,255,0.06)", color: "#e2e8f0", cursor: "pointer", fontSize: 18 }}>×</button>
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
         {messages.map((msg, idx) => (
@@ -282,7 +599,14 @@ const BUBUChatbot = ({ data, isVisible, onClose }) => {
             </div>
           </div>
         ))}
-        {isTyping && <div style={{ color: "#94a3b8", fontSize: 12 }}>BUBU is thinking…</div>}
+        {isTyping && (
+          <div style={{ display: "flex", gap: 8, padding: "10px 12px", background: "rgba(255,255,255,0.06)", 
+            borderRadius: 14, width: "fit-content" }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#6366f1", animation: "pulse 1s infinite" }}/>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#8b5cf6", animation: "pulse 1s infinite 0.2s" }}/>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#a78bfa", animation: "pulse 1s infinite 0.4s" }}/>
+          </div>
+        )}
         <div ref={endRef} />
       </div>
       <div style={{ padding: 12, borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", gap: 10 }}>
@@ -290,7 +614,7 @@ const BUBUChatbot = ({ data, isVisible, onClose }) => {
           onKeyDown={(e) => { if (e.key === "Enter") handleSend(); }}
           style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
             borderRadius: 12, padding: "10px 12px", color: "#e2e8f0", outline: "none", fontSize: 12 }}
-          placeholder="Ask BUBU…" />
+          placeholder="Ask me anything..." />
         <button onClick={handleSend} disabled={!inputValue.trim() || isTyping}
           style={{ padding: "10px 12px", borderRadius: 12, border: "none", cursor: "pointer",
             background: !inputValue.trim() || isTyping ? "rgba(255,255,255,0.1)" : "linear-gradient(135deg,#6366f1,#8b5cf6)",
@@ -303,10 +627,9 @@ const BUBUChatbot = ({ data, isVisible, onClose }) => {
 };
 
 /* ══════════════════════════════════════════
-   MAIN
+   MAIN COMPONENT
 ═══════════════════════════════════════════ */
 export default function Dashboard() {
-
   const [tab,        setTab]       = useState("ANALYTICS");
   const [data,       setData]      = useState([]);
   const [loading,    setLoading]   = useState(false);
@@ -332,7 +655,6 @@ export default function Dashboard() {
 
   const allYears = useMemo(()=>[...new Set(data.map(r=>r.year))].sort(),[data]);
 
-  // ── ANALYTICS tab data (no revenue) ──
   const aRows = useMemo(()=>selYear==="ALL"?data:data.filter(r=>r.year===selYear),[data,selYear]);
   const K = useMemo(()=>({
     students:  aRows.reduce((s,r)=>s+r.totalStudents,0),
@@ -393,7 +715,6 @@ export default function Dashboard() {
     {name:"Female",value:K.female, color:C.pink},
   ];
 
-  // ── FINANCE tab data ──
   const fRows = useMemo(()=>finYear==="ALL"?data:data.filter(r=>r.year===finYear),[data,finYear]);
   const FK = useMemo(()=>({
     revenue: fRows.reduce((s,r)=>s+r.totalPaid,0),
@@ -418,7 +739,6 @@ export default function Dashboard() {
     return Object.values(m);
   },[fRows]);
 
-  // ── MANUAL tab data ──
   const manualYears=[...new Set(manualRows.map(d=>d.year))];
   const manualChart=MONTHS.map(m=>{
     const row={month:m};
@@ -426,21 +746,16 @@ export default function Dashboard() {
     return row;
   });
 
-  /* ════ RENDER ════ */
   return (
     <div style={{minHeight:"100vh",background:"linear-gradient(180deg,#f8fafc 0%, #eef2ff 45%, #ffffff 100%)",fontFamily:"'DM Sans',-apple-system,sans-serif",color:"#0f172a"}}>
-
-      {/* bg grid */}
       <div style={{position:"fixed",inset:0,zIndex:0,pointerEvents:"none",
         backgroundImage:"linear-gradient(rgba(15,23,42,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(15,23,42,0.04) 1px,transparent 1px)",
         backgroundSize:"44px 44px"}}/>
 
-      {/* ── HEADER ── */}
       <header style={{position:"sticky",top:0,zIndex:100,
         background:"rgba(255,255,255,0.82)",backdropFilter:"blur(16px)",
         borderBottom:"1px solid rgba(15,23,42,0.08)",
         padding:"0 28px",display:"flex",alignItems:"center",justifyContent:"space-between",height:62}}>
-
         <div style={{display:"flex",alignItems:"center",gap:12}}>
           <div style={{width:34,height:34,borderRadius:9,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
             display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,
@@ -451,7 +766,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Tab nav — 3 tabs */}
         <div style={{display:"flex",gap:5,background:"rgba(255,255,255,0.04)",
           borderRadius:11,padding:"4px",border:"1px solid rgba(255,255,255,0.07)"}}>
           {[
@@ -476,20 +790,18 @@ export default function Dashboard() {
               ✓ {data.length} months · {allYears.join(", ")}
             </span>
           )}
-          {/* Year filter shown only on Analytics tab */}
           {allYears.length>0 && tab==="ANALYTICS" &&(
             <select value={selYear} onChange={e=>setSelYear(e.target.value)}
-              style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",
-                borderRadius:8,padding:"6px 12px",color:"#e2e8f0",fontSize:12,cursor:"pointer"}}>
+              style={{background:"rgba(255,255,255,0.9)",border:"1px solid rgba(15,23,42,0.1)",
+                borderRadius:8,padding:"6px 12px",color:"#0f172a",fontSize:12,cursor:"pointer"}}>
               <option value="ALL">All Years</option>
               {allYears.map(y=><option key={y}>{y}</option>)}
             </select>
           )}
-          {/* Separate year filter for Finance tab */}
           {allYears.length>0 && tab==="FINANCE" &&(
             <select value={finYear} onChange={e=>setFinYear(e.target.value)}
-              style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",
-                borderRadius:8,padding:"6px 12px",color:"#e2e8f0",fontSize:12,cursor:"pointer"}}>
+              style={{background:"rgba(255,255,255,0.9)",border:"1px solid rgba(15,23,42,0.1)",
+                borderRadius:8,padding:"6px 12px",color:"#0f172a",fontSize:12,cursor:"pointer"}}>
               <option value="ALL">All Years</option>
               {allYears.map(y=><option key={y}>{y}</option>)}
             </select>
@@ -498,28 +810,23 @@ export default function Dashboard() {
       </header>
 
       <main style={{position:"relative",zIndex:1,padding:"28px",maxWidth:1380,margin:"0 auto"}}>
-
-        {/* ════════════════════════════════════
-            ANALYTICS TAB — students & placement only, zero revenue
-        ════════════════════════════════════ */}
         {tab==="ANALYTICS"&&(
           <>
-            {/* Upload zone (shown when no data loaded) */}
             {!success&&(
               <div
                 onDragOver={e=>{e.preventDefault();setDrag(true)}}
                 onDragLeave={()=>setDrag(false)}
                 onDrop={e=>{e.preventDefault();setDrag(false);handleFile(e.dataTransfer.files[0])}}
                 onClick={()=>document.getElementById("xl").click()}
-                style={{border:`2px dashed ${drag?"#6366f1":"rgba(255,255,255,0.1)"}`,
+                style={{border:`2px dashed ${drag?"#6366f1":"rgba(15,23,42,0.1)"}`,
                   borderRadius:18,padding:"52px 32px",textAlign:"center",
-                  background:drag?"rgba(99,102,241,0.06)":"rgba(255,255,255,0.02)",
+                  background:drag?"rgba(99,102,241,0.06)":"rgba(255,255,255,0.7)",
                   marginBottom:28,transition:"all .3s",cursor:"pointer"}}>
                 <input type="file" id="xl" accept=".xlsx,.xls" style={{display:"none"}}
                   onChange={e=>handleFile(e.target.files[0])}/>
                 <div style={{fontSize:48,marginBottom:14}}>📂</div>
-                <div style={{fontSize:17,fontWeight:700,color:"#cbd5e1",marginBottom:8}}>
-                  Drop your <span style={{color:"#818cf8"}}>Year-Month Summary</span> Excel here
+                <div style={{fontSize:17,fontWeight:700,color:"#0f172a",marginBottom:8}}>
+                  Drop your <span style={{color:"#6366f1"}}>Year-Month Summary</span> Excel here
                 </div>
                 <div style={{color:"#475569",fontSize:13}}>or click to browse · .xlsx / .xls</div>
                 {loading&&<div style={{marginTop:20,color:"#6366f1",fontWeight:600}}>⏳ Parsing…</div>}
@@ -534,8 +841,8 @@ export default function Dashboard() {
                   ✅ {data.length} monthly records · Total {fmt(data.reduce((s,r)=>s+r.totalStudents,0))} students
                 </div>
                 <button onClick={()=>{setData([]);setSuccess(false);setError("")}}
-                  style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",
-                    borderRadius:8,padding:"6px 16px",color:"#94a3b8",cursor:"pointer",fontSize:12}}>
+                  style={{background:"rgba(15,23,42,0.05)",border:"1px solid rgba(15,23,42,0.1)",
+                    borderRadius:8,padding:"6px 16px",color:"#64748b",cursor:"pointer",fontSize:12}}>
                   ↩ Upload new file
                 </button>
               </div>
@@ -543,7 +850,6 @@ export default function Dashboard() {
 
             {data.length>0&&(
               <>
-                {/* ── KPIs: students & placement ONLY ── */}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:14,marginBottom:28}}>
                   <Kpi title="Total Students"   value={fmt(K.students)}  sub={selYear==="ALL"?`${allYears.join(" · ")}`:selYear}  color={C.indigo}  icon="🎓"/>
                   <Kpi title="Placed"           value={fmt(K.offered)}   sub={`${placementRate}% placement rate`}                  color={C.emerald} icon="🤝"/>
@@ -553,7 +859,6 @@ export default function Dashboard() {
                   <Kpi title="Python Full Stack"value={fmt(K.pythonFS)}  sub={`${K.students>0?((K.pythonFS/K.students)*100).toFixed(0):0}% of students`} color={C.teal}   icon="🐍"/>
                 </div>
 
-                {/* ── Section toggles ── */}
                 <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:22}}>
                   {[
                     ["overview","📈 Enrollment Overview"],
@@ -565,24 +870,23 @@ export default function Dashboard() {
                   ].map(([k,label])=>(
                     <button key={k} onClick={()=>setVis(v=>({...v,[k]:!v[k]}))} style={{
                       padding:"5px 14px",borderRadius:20,border:"1px solid",
-                      borderColor:vis[k]?"#6366f1":"rgba(255,255,255,0.08)",
+                      borderColor:vis[k]?"#6366f1":"rgba(15,23,42,0.08)",
                       background:vis[k]?"rgba(99,102,241,0.15)":"transparent",
-                      color:vis[k]?"#818cf8":"#475569",
+                      color:vis[k]?"#6366f1":"#475569",
                       fontSize:11,fontWeight:600,cursor:"pointer",transition:"all .2s"}}>
                       {label}
                     </button>
                   ))}
                 </div>
 
-                {/* ── CHART 1: Year-wise enrollment & placement bar ── */}
                 {vis.overview&&(
                   <Card title="Year-wise Student Enrollment & Placement" accent={C.indigo} badge="BAR CHART">
                     <ResponsiveContainer width="100%" height={320}>
                       <BarChart data={yearData} barGap={4} barCategoryGap="28%">
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.04)" vertical={false}/>
                         <XAxis dataKey="year" {...ax}/><YAxis {...ax}/>
                         <Tooltip content={<CustomTooltip/>}/>
-                        <Legend wrapperStyle={{color:"#94a3b8",fontSize:12,paddingTop:12}}/>
+                        <Legend wrapperStyle={{color:"#64748b",fontSize:12,paddingTop:12}}/>
                         <Bar dataKey="totalStudents" name="Total Students" fill={C.indigo}  radius={[5,5,0,0]}/>
                         <Bar dataKey="offered"       name="Placed"         fill={C.emerald} radius={[5,5,0,0]}/>
                         <Bar dataKey="interested"    name="Interested"     fill={C.cyan}    radius={[5,5,0,0]}/>
@@ -592,16 +896,15 @@ export default function Dashboard() {
                   </Card>
                 )}
 
-                {/* ── CHART 2+3: Monthly enrollment & offers lines ── */}
                 {vis.monthly&&(
                   <>
                     <Card title="Month-wise Student Enrollment by Year" accent={C.cyan} badge="MULTI-LINE">
                       <ResponsiveContainer width="100%" height={300}>
                         <LineChart data={monthlyData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.04)" vertical={false}/>
                           <XAxis dataKey="month" {...ax}/><YAxis {...ax}/>
                           <Tooltip content={<CustomTooltip/>}/>
-                          <Legend wrapperStyle={{color:"#94a3b8",fontSize:12,paddingTop:12}}/>
+                          <Legend wrapperStyle={{color:"#64748b",fontSize:12,paddingTop:12}}/>
                           {allYears.map((y,i)=>(
                             <Line key={y} type="monotone" dataKey={`s_${y}`} name={y}
                               stroke={PALETTE[i%PALETTE.length]} strokeWidth={3}
@@ -615,10 +918,10 @@ export default function Dashboard() {
                     <Card title="Month-wise Placements by Year" accent={C.emerald} badge="BAR">
                       <ResponsiveContainer width="100%" height={280}>
                         <BarChart data={monthlyData} barGap={2} barCategoryGap="22%">
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.04)" vertical={false}/>
                           <XAxis dataKey="month" {...ax}/><YAxis {...ax}/>
                           <Tooltip content={<CustomTooltip/>}/>
-                          <Legend wrapperStyle={{color:"#94a3b8",fontSize:12,paddingTop:12}}/>
+                          <Legend wrapperStyle={{color:"#64748b",fontSize:12,paddingTop:12}}/>
                           {allYears.map((y,i)=>(
                             <Bar key={y} dataKey={`o_${y}`} name={y} fill={PALETTE[i%PALETTE.length]} radius={[4,4,0,0]}/>
                           ))}
@@ -628,7 +931,6 @@ export default function Dashboard() {
                   </>
                 )}
 
-                {/* ── CHART 4+5: Status & Gender pies side-by-side ── */}
                 {(vis.status||vis.gender)&&(
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:24}}>
                     {vis.status&&(
@@ -638,7 +940,7 @@ export default function Dashboard() {
                             <Pie data={statusData} cx="50%" cy="50%" innerRadius={55} outerRadius={95}
                               paddingAngle={5} dataKey="value"
                               label={({name,percent})=>`${name} ${(percent*100).toFixed(0)}%`}
-                              labelLine={{stroke:"rgba(255,255,255,0.15)"}}>
+                              labelLine={{stroke:"rgba(15,23,42,0.15)"}}>
                               {statusData.map((d,i)=><Cell key={i} fill={d.color}/>)}
                             </Pie>
                             <Tooltip content={<CustomTooltip/>}/>
@@ -653,7 +955,7 @@ export default function Dashboard() {
                             <Pie data={genderData} cx="50%" cy="50%" innerRadius={38} outerRadius={65}
                               paddingAngle={4} dataKey="value"
                               label={({name,percent})=>`${name} ${(percent*100).toFixed(0)}%`}
-                              labelLine={{stroke:"rgba(255,255,255,0.15)"}}>
+                              labelLine={{stroke:"rgba(15,23,42,0.15)"}}>
                               {genderData.map((d,i)=><Cell key={i} fill={d.color}/>)}
                             </Pie>
                             <Tooltip content={<CustomTooltip/>}/>
@@ -661,7 +963,7 @@ export default function Dashboard() {
                         </ResponsiveContainer>
                         <ResponsiveContainer width="100%" height={120}>
                           <BarChart data={yearData} barCategoryGap="40%">
-                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.04)" vertical={false}/>
                             <XAxis dataKey="year" {...ax}/><YAxis {...ax}/>
                             <Tooltip content={<CustomTooltip/>}/>
                             <Bar dataKey="male"   name="Male"   stackId="g" fill={C.sky}  radius={[0,0,3,3]}/>
@@ -673,16 +975,15 @@ export default function Dashboard() {
                   </div>
                 )}
 
-                {/* ── CHART 6: Course split ── */}
                 {vis.course&&(
                   <Card title="Course-wise Enrollment by Year" accent={C.orange} badge="GROUPED BAR">
                     <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:18,alignItems:"center"}}>
                       <ResponsiveContainer width="100%" height={250}>
                         <BarChart data={yearData} barCategoryGap="30%">
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.04)" vertical={false}/>
                           <XAxis dataKey="year" {...ax}/><YAxis {...ax}/>
                           <Tooltip content={<CustomTooltip/>}/>
-                          <Legend wrapperStyle={{color:"#94a3b8",fontSize:12}}/>
+                          <Legend wrapperStyle={{color:"#64748b",fontSize:12}}/>
                           <Bar dataKey="javaFS"   name="Java Full Stack"   fill={C.orange} radius={[5,5,0,0]}/>
                           <Bar dataKey="pythonFS" name="Python Full Stack" fill={C.teal}   radius={[5,5,0,0]}/>
                         </BarChart>
@@ -691,9 +992,9 @@ export default function Dashboard() {
                         {[{name:"Java Full Stack",val:K.javaFS,color:C.orange},{name:"Python Full Stack",val:K.pythonFS,color:C.teal}].map(c=>(
                           <div key={c.name} style={{padding:"14px 16px",borderRadius:12,
                             background:`${c.color}12`,border:`1px solid ${c.color}30`}}>
-                            <div style={{fontSize:10,color:"#94a3b8",marginBottom:4}}>{c.name}</div>
+                            <div style={{fontSize:10,color:"#64748b",marginBottom:4}}>{c.name}</div>
                             <div style={{fontSize:24,fontWeight:800,color:c.color}}>{fmt(c.val)}</div>
-                            <div style={{marginTop:8,height:4,borderRadius:4,background:"rgba(255,255,255,0.05)"}}>
+                            <div style={{marginTop:8,height:4,borderRadius:4,background:"rgba(15,23,42,0.05)"}}>
                               <div style={{height:"100%",borderRadius:4,background:c.color,transition:"width 1s",
                                 width:`${K.students>0?(c.val/K.students*100):0}%`}}/>
                             </div>
@@ -707,26 +1008,24 @@ export default function Dashboard() {
                   </Card>
                 )}
 
-                {/* ── CHART 7: Radar ── */}
                 {vis.radar&&allYears.length>1&&(
                   <Card title="Multi-Year Performance Radar" accent={C.violet} badge="RADAR">
                     <ResponsiveContainer width="100%" height={320}>
                       <RadarChart data={radarData}>
-                        <PolarGrid stroke="rgba(255,255,255,0.06)"/>
+                        <PolarGrid stroke="rgba(15,23,42,0.06)"/>
                         <PolarAngleAxis dataKey="metric" tick={{fill:"#64748b",fontSize:12}}/>
                         {allYears.map((y,i)=>(
                           <Radar key={y} name={y} dataKey={y}
                             stroke={PALETTE[i%PALETTE.length]} fill={PALETTE[i%PALETTE.length]}
                             fillOpacity={0.1} strokeWidth={2}/>
                         ))}
-                        <Legend wrapperStyle={{color:"#94a3b8",fontSize:12}}/>
+                        <Legend wrapperStyle={{color:"#64748b",fontSize:12}}/>
                         <Tooltip content={<CustomTooltip/>}/>
                       </RadarChart>
                     </ResponsiveContainer>
                   </Card>
                 )}
 
-                {/* ── Per-year monthly drilldown (students only) ── */}
                 {yearData.map(yd=>{
                   const color=YEAR_COLOR[yd.year]||C.indigo;
                   const mRows=data.filter(r=>r.year===yd.year)
@@ -750,10 +1049,10 @@ export default function Dashboard() {
                       </div>
                       <ResponsiveContainer width="100%" height={220}>
                         <BarChart data={mRows} barCategoryGap="30%">
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.04)" vertical={false}/>
                           <XAxis dataKey="month" {...ax}/><YAxis {...ax}/>
                           <Tooltip content={<CustomTooltip/>}/>
-                          <Legend wrapperStyle={{color:"#94a3b8",fontSize:11,paddingTop:8}}/>
+                          <Legend wrapperStyle={{color:"#64748b",fontSize:11,paddingTop:8}}/>
                           <Bar dataKey="totalStudents" name="Students"   fill={color}     radius={[4,4,0,0]}/>
                           <Bar dataKey="offered"       name="Placed"     fill={C.emerald} radius={[4,4,0,0]}/>
                           <Bar dataKey="interested"    name="Interested" fill={C.cyan}    radius={[4,4,0,0]}/>
@@ -767,35 +1066,30 @@ export default function Dashboard() {
           </>
         )}
 
-        {/* ════════════════════════════════════
-            FINANCE TAB — revenue only, separate from team view
-        ════════════════════════════════════ */}
         {tab==="FINANCE"&&(
           <>
             {!data.length&&(
               <div style={{textAlign:"center",padding:"60px 32px",
-                border:"2px dashed rgba(255,255,255,0.1)",borderRadius:18,
-                background:"rgba(255,255,255,0.02)"}}>
+                border:"2px dashed rgba(15,23,42,0.1)",borderRadius:18,
+                background:"rgba(255,255,255,0.7)"}}>
                 <div style={{fontSize:40,marginBottom:12}}>🔒</div>
                 <div style={{color:"#64748b",fontSize:15}}>
-                  Upload data in the <strong style={{color:"#818cf8"}}>Analytics</strong> tab first
+                  Upload data in the <strong style={{color:"#6366f1"}}>Analytics</strong> tab first
                 </div>
               </div>
             )}
 
             {data.length>0&&(
               <>
-                {/* Finance warning banner */}
                 <div style={{display:"flex",alignItems:"center",gap:12,
                   background:"rgba(245,158,11,0.08)",border:"1px solid rgba(245,158,11,0.2)",
                   borderRadius:12,padding:"12px 20px",marginBottom:24}}>
                   <span style={{fontSize:18}}>🔒</span>
-                  <span style={{color:"#fbbf24",fontSize:13,fontWeight:600}}>
+                  <span style={{color:"#f59e0b",fontSize:13,fontWeight:600}}>
                     Finance view — revenue data is not shown in the Analytics tab
                   </span>
                 </div>
 
-                {/* Finance KPIs */}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14,marginBottom:28}}>
                   <Kpi title="Total Revenue"   value={fmtMoney(FK.revenue)} sub="Amount collected"    color={C.amber}   icon="💰"/>
                   <Kpi title="Total Pending"   value={fmtMoney(FK.pending)} sub="Outstanding amount"  color={C.rose}    icon="⏳"/>
@@ -805,22 +1099,20 @@ export default function Dashboard() {
                     sub="Revenue per student" color={C.violet} icon="🎓"/>
                 </div>
 
-                {/* Year-wise revenue bar */}
                 <Card title="Year-wise Revenue vs Pending" accent={C.amber} badge="BAR CHART">
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={finYearData} barGap={6} barCategoryGap="35%">
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.04)" vertical={false}/>
                       <XAxis dataKey="year" {...ax}/>
                       <YAxis {...ax} tickFormatter={v=>`₹${(v/1e5).toFixed(0)}L`}/>
-                      <Tooltip content={<Tooltip/>}/>
-                      <Legend wrapperStyle={{color:"#94a3b8",fontSize:12,paddingTop:12}}/>
+                      <Tooltip content={<CustomTooltip/>}/>
+                      <Legend wrapperStyle={{color:"#64748b",fontSize:12,paddingTop:12}}/>
                       <Bar dataKey="revenue" name="Revenue Collected" fill={C.amber}   radius={[5,5,0,0]}/>
                       <Bar dataKey="pending" name="Pending"           fill={C.rose}    radius={[5,5,0,0]}/>
                     </BarChart>
                   </ResponsiveContainer>
                 </Card>
 
-                {/* Year-wise revenue area trend */}
                 <Card title="Revenue Trend (Year-wise)" accent={C.amber} badge="AREA">
                   <ResponsiveContainer width="100%" height={260}>
                     <ComposedChart data={finYearData}>
@@ -834,18 +1126,17 @@ export default function Dashboard() {
                           <stop offset="95%" stopColor={C.rose} stopOpacity={0}/>
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.04)" vertical={false}/>
                       <XAxis dataKey="year" {...ax}/>
                       <YAxis {...ax} tickFormatter={v=>`₹${(v/1e5).toFixed(0)}L`}/>
-                      <Tooltip content={<Tooltip/>}/>
-                      <Legend wrapperStyle={{color:"#94a3b8",fontSize:12,paddingTop:12}}/>
+                      <Tooltip content={<CustomTooltip/>}/>
+                      <Legend wrapperStyle={{color:"#64748b",fontSize:12,paddingTop:12}}/>
                       <Area type="monotone" dataKey="revenue" name="Revenue" stroke={C.amber} fill="url(#gRev)" strokeWidth={3} dot={{fill:C.amber,r:5,strokeWidth:0}}/>
                       <Area type="monotone" dataKey="pending" name="Pending" stroke={C.rose}  fill="url(#gPen)" strokeWidth={2} dot={{fill:C.rose, r:4,strokeWidth:0}}/>
                     </ComposedChart>
                   </ResponsiveContainer>
                 </Card>
 
-                {/* Monthly revenue by year */}
                 <Card title="Month-wise Revenue by Year" accent={C.emerald} badge="AREA">
                   <ResponsiveContainer width="100%" height={280}>
                     <AreaChart data={finMonthly}>
@@ -857,11 +1148,11 @@ export default function Dashboard() {
                           </linearGradient>
                         ))}
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.04)" vertical={false}/>
                       <XAxis dataKey="month" {...ax}/>
                       <YAxis {...ax} tickFormatter={v=>`₹${(v/1e5).toFixed(0)}L`}/>
-                      <Tooltip content={<Tooltip/>}/>
-                      <Legend wrapperStyle={{color:"#94a3b8",fontSize:12,paddingTop:12}}/>
+                      <Tooltip content={<CustomTooltip/>}/>
+                      <Legend wrapperStyle={{color:"#64748b",fontSize:12,paddingTop:12}}/>
                       {allYears.map((y,i)=>(
                         <Area key={y} type="monotone" dataKey={`r_${y}`} name={`${y} Revenue`}
                           stroke={PALETTE[i%PALETTE.length]} fill={`url(#fr${y})`}
@@ -871,15 +1162,14 @@ export default function Dashboard() {
                   </ResponsiveContainer>
                 </Card>
 
-                {/* Monthly pending by year */}
                 <Card title="Month-wise Pending by Year" accent={C.rose} badge="LINE">
                   <ResponsiveContainer width="100%" height={260}>
                     <LineChart data={finMonthly}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.04)" vertical={false}/>
                       <XAxis dataKey="month" {...ax}/>
                       <YAxis {...ax} tickFormatter={v=>`₹${(v/1e5).toFixed(0)}L`}/>
-                      <Tooltip content={<Tooltip/>}/>
-                      <Legend wrapperStyle={{color:"#94a3b8",fontSize:12,paddingTop:12}}/>
+                      <Tooltip content={<CustomTooltip/>}/>
+                      <Legend wrapperStyle={{color:"#64748b",fontSize:12,paddingTop:12}}/>
                       {allYears.map((y,i)=>(
                         <Line key={y} type="monotone" dataKey={`p_${y}`} name={`${y} Pending`}
                           stroke={PALETTE[i%PALETTE.length]} strokeWidth={2.5}
@@ -889,7 +1179,6 @@ export default function Dashboard() {
                   </ResponsiveContainer>
                 </Card>
 
-                {/* Per-year financial drilldown */}
                 {finYearData.map(yd=>{
                   const color=YEAR_COLOR[yd.year]||C.amber;
                   const mRows=data.filter(r=>r.year===yd.year)
@@ -914,11 +1203,11 @@ export default function Dashboard() {
                       </div>
                       <ResponsiveContainer width="100%" height={220}>
                         <BarChart data={mRows} barCategoryGap="35%">
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.04)" vertical={false}/>
                           <XAxis dataKey="month" {...ax}/>
                           <YAxis {...ax} tickFormatter={v=>`₹${(v/1e5).toFixed(0)}L`}/>
                           <Tooltip content={<CustomTooltip/>}/>
-                          <Legend wrapperStyle={{color:"#94a3b8",fontSize:11,paddingTop:8}}/>
+                          <Legend wrapperStyle={{color:"#64748b",fontSize:11,paddingTop:8}}/>
                           <Bar dataKey="totalPaid"    name="Collected" fill={C.amber} radius={[4,4,0,0]}/>
                           <Bar dataKey="totalPending" name="Pending"   fill={C.rose}  radius={[4,4,0,0]}/>
                         </BarChart>
@@ -931,27 +1220,24 @@ export default function Dashboard() {
           </>
         )}
 
-        {/* ════════════════════════════════════
-            MANUAL TAB
-        ════════════════════════════════════ */}
         {tab==="MANUAL"&&(
           <>
             <Card title="Add Monthly Data Manually" accent={C.indigo}>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",gap:12,alignItems:"end"}}>
                 <input type="text" placeholder="Year (e.g. 2024)" value={mEntry.year}
                   onChange={e=>setMEntry(v=>({...v,year:e.target.value}))}
-                  style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",
-                    borderRadius:9,padding:"11px 14px",color:"#e2e8f0",fontSize:13,outline:"none"}}/>
+                  style={{background:"rgba(255,255,255,0.9)",border:"1px solid rgba(15,23,42,0.1)",
+                    borderRadius:9,padding:"11px 14px",color:"#0f172a",fontSize:13,outline:"none"}}/>
                 <select value={mEntry.month} onChange={e=>setMEntry(v=>({...v,month:e.target.value}))}
-                  style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",
-                    borderRadius:9,padding:"11px 14px",color:"#e2e8f0",fontSize:13}}>
+                  style={{background:"rgba(255,255,255,0.9)",border:"1px solid rgba(15,23,42,0.1)",
+                    borderRadius:9,padding:"11px 14px",color:"#0f172a",fontSize:13}}>
                   <option value="">Select Month</option>
                   {MONTHS.map(m=><option key={m}>{m}</option>)}
                 </select>
                 <input type="number" placeholder="Count" value={mEntry.count}
                   onChange={e=>setMEntry(v=>({...v,count:e.target.value}))}
-                  style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",
-                    borderRadius:9,padding:"11px 14px",color:"#e2e8f0",fontSize:13,outline:"none"}}/>
+                  style={{background:"rgba(255,255,255,0.9)",border:"1px solid rgba(15,23,42,0.1)",
+                    borderRadius:9,padding:"11px 14px",color:"#0f172a",fontSize:13,outline:"none"}}/>
                 <button onClick={()=>{
                   if(!mEntry.year||!mEntry.month||!mEntry.count)return;
                   setManualRows(p=>[...p,{...mEntry,count:+mEntry.count}]);
@@ -966,7 +1252,7 @@ export default function Dashboard() {
                 <div style={{marginTop:14,display:"flex",flexWrap:"wrap",gap:7}}>
                   {manualRows.slice(-12).map((d,i)=>(
                     <span key={i} style={{background:"rgba(99,102,241,0.1)",border:"1px solid rgba(99,102,241,0.2)",
-                      borderRadius:8,padding:"3px 10px",fontSize:11,color:"#818cf8"}}>
+                      borderRadius:8,padding:"3px 10px",fontSize:11,color:"#6366f1"}}>
                       {d.year} {d.month}: <b>{d.count}</b>
                     </span>
                   ))}
@@ -979,10 +1265,10 @@ export default function Dashboard() {
                 <Card title="Year-wise Monthly Enrollment — Bar" accent={C.indigo} badge="BAR">
                   <ResponsiveContainer width="100%" height={310}>
                     <BarChart data={manualChart} barGap={3} barCategoryGap="22%">
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.04)" vertical={false}/>
                       <XAxis dataKey="month" {...ax}/><YAxis {...ax}/>
-                      <Tooltip content={<Tooltip/>}/>
-                      <Legend wrapperStyle={{color:"#94a3b8",fontSize:12,paddingTop:12}}/>
+                      <Tooltip content={<CustomTooltip/>}/>
+                      <Legend wrapperStyle={{color:"#64748b",fontSize:12,paddingTop:12}}/>
                       {manualYears.map((y,i)=>(
                         <Bar key={y} dataKey={y} name={y} fill={PALETTE[i%PALETTE.length]} radius={[5,5,0,0]}/>
                       ))}
@@ -993,10 +1279,10 @@ export default function Dashboard() {
                 <Card title="Year-wise Monthly Enrollment — Line" accent={C.emerald} badge="LINE">
                   <ResponsiveContainer width="100%" height={290}>
                     <LineChart data={manualChart}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.04)" vertical={false}/>
                       <XAxis dataKey="month" {...ax}/><YAxis {...ax}/>
-                      <Tooltip content={<Tooltip/>}/>
-                      <Legend wrapperStyle={{color:"#94a3b8",fontSize:12,paddingTop:12}}/>
+                      <Tooltip content={<CustomTooltip/>}/>
+                      <Legend wrapperStyle={{color:"#64748b",fontSize:12,paddingTop:12}}/>
                       {manualYears.map((y,i)=>(
                         <Line key={y} type="monotone" dataKey={y} name={y}
                           stroke={PALETTE[i%PALETTE.length]} strokeWidth={3}
@@ -1018,10 +1304,10 @@ export default function Dashboard() {
                           </linearGradient>
                         ))}
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.04)" vertical={false}/>
                       <XAxis dataKey="month" {...ax}/><YAxis {...ax}/>
-                      <Tooltip content={<Tooltip/>}/>
-                      <Legend wrapperStyle={{color:"#94a3b8",fontSize:12,paddingTop:12}}/>
+                      <Tooltip content={<CustomTooltip/>}/>
+                      <Legend wrapperStyle={{color:"#64748b",fontSize:12,paddingTop:12}}/>
                       {manualYears.map((y,i)=>(
                         <Area key={y} type="monotone" dataKey={y} name={y}
                           stroke={PALETTE[i%PALETTE.length]} fill={`url(#ag${y})`}
@@ -1037,12 +1323,11 @@ export default function Dashboard() {
       </main>
 
       <footer style={{position:"relative",zIndex:1,
-        borderTop:"1px solid rgba(255,255,255,0.05)",
-        padding:"18px 28px",textAlign:"center",color:"#334155",fontSize:11}}>
-        2025 ThopsTech Career Solutions · Analytics Dashboard v3.4
+        borderTop:"1px solid rgba(15,23,42,0.05)",
+        padding:"18px 28px",textAlign:"center",color:"#64748b",fontSize:11}}>
+        2025 ThopsTech Career Solutions · Enhanced ML Analytics Dashboard v4.0
       </footer>
 
-      {/* Floating AI Chatbot Button */}
       <button
         onClick={() => setShowChatbot(!showChatbot)}
         style={{
@@ -1078,19 +1363,16 @@ export default function Dashboard() {
         {showChatbot ? "✕" : "🤖"}
       </button>
 
-      {/* BUBU AI Chatbot */}
       <BUBUChatbot 
         data={data} 
         isVisible={showChatbot} 
         onClose={() => setShowChatbot(false)} 
       />
 
-      {/* CSS Animations */}
       <style>{`
         @keyframes pulse {
-          0% { box-shadow: 0 8px 32px rgba(99,102,241,0.4), 0 0 0 1px rgba(255,255,255,0.1); }
+          0%, 100% { box-shadow: 0 8px 32px rgba(99,102,241,0.4), 0 0 0 1px rgba(255,255,255,0.1); }
           50% { box-shadow: 0 8px 40px rgba(99,102,241,0.6), 0 0 0 4px rgba(99,102,241,0.2); }
-          100% { box-shadow: 0 8px 32px rgba(99,102,241,0.4), 0 0 0 1px rgba(255,255,255,0.1); }
         }
       `}</style>
     </div>

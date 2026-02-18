@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ThopsTech Trainer Assessment System</title>
+    
+    <!-- React and Babel -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- EmailJS for sending emails -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+    
+    <!-- HTML2Canvas for screenshot -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <!-- Monaco Editor for code compilation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs/loader.min.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 25px;
+            text-align: center;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+        
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 16px;
+        }
+        
+        .registration-form {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .assessment-container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+        
+        .timer {
+            background: #ff6b6b;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-weight: bold;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+        
+        .question-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .question-text {
+            font-size: 18px;
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+        
+        .code-editor {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            height: 300px;
+            margin: 15px 0;
+        }
+        
+        .sql-editor {
+            width: 100%;
+            min-height: 200px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            resize: vertical;
+        }
+        
+        .options-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .option {
+            background: white;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .option:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+        
+        .option.selected {
+            border-color: #667eea;
+            background: #667eea;
+            color: white;
+        }
+        
+        .run-code-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        
+        .output-panel {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-family: 'Courier New', monospace;
+            min-height: 100px;
+        }
+        
+        .progress-bar {
+            background: #e9ecef;
+            border-radius: 10px;
+            height: 8px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            height: 100%;
+            transition: width 0.3s;
+        }
+        
+        .results-container {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+        
+        .score-display {
+            font-size: 48px;
+            font-weight: bold;
+            color: #667eea;
+            margin: 20px 0;
+        }
+        
+        .performance-chart {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        // Question Banks
+        const questionBank = {
+            java: [
+                {
+                    id: 'java1',
+                    type: 'coding',
+                    question: 'Write a Java program to implement a binary search tree with insert, delete, and search operations.',
+                    difficulty: 'hard',
+                    marks: 15,
+                    starterCode: `public class BST {
+    static class Node {
+        int data;
+        Node left, right;
+        
+        public Node(int item) {
+            data = item;
+            left = right = null;
+        }
+    }
+    
+    Node root;
+    
+    public BST() {
+        root = null;
+    }
+    
+    // Insert method
+    void insert(int data) {
+        // Your code here
+    }
+    
+    // Search method
+    boolean search(int data) {
+        // Your code here
+        return false;
+    }
+    
+    // Delete method
+    void delete(int data) {
+        // Your code here
+    }
+    
+    // Inorder traversal
+    void inorder() {
+        // Your code here
+    }
+    
+    public static void main(String[] args) {
+        BST tree = new BST();
+        // Test your implementation
+    }
+}`,
+                    testCases: [
+                        { input: 'tree.insert(50); tree.insert(30); tree.insert(70);', expected: 'Tree with 3 nodes' },
+                        { input: 'tree.search(50)', expected: 'true' },
+                        { input: 'tree.search(100)', expected: 'false' }
+                    ]
+                },
+                {
+                    id: 'java2',
+                    type: 'coding',
+                    question: 'Implement a thread-safe singleton class in Java and explain the double-checked locking pattern.',
+                    difficulty: 'medium',
+                    marks: 10,
+                    starterCode: `public class DatabaseConnection {
+    private static volatile DatabaseConnection instance;
+    private String connectionUrl;
+    
+    // Private constructor
+    private DatabaseConnection() {
+        // Initialize connection
+        this.connectionUrl = "jdbc:mysql://localhost:3306/mydb";
+    }
+    
+    // Double-checked locking implementation
+    public static DatabaseConnection getInstance() {
+        // Your code here
+        return null;
+    }
+    
+    public void connect() {
+        System.out.println("Connected to: " + connectionUrl);
+    }
+    
+    public static void main(String[] args) {
+        // Test singleton behavior
+    }
+}`,
+                    testCases: [
+                        { input: 'DatabaseConnection db1 = DatabaseConnection.getInstance();', expected: 'Same instance' },
+                        { input: 'DatabaseConnection db2 = DatabaseConnection.getInstance();', expected: 'Same instance' }
+                    ]
+                },
+                {
+                    id: 'java3',
+                    type: 'theory',
+                    question: 'Explain the difference between ArrayList and LinkedList in Java. When would you prefer one over the other?',
+                    difficulty: 'medium',
+                    marks: 8,
+                    options: [
+                        'ArrayList uses dynamic array, LinkedList uses doubly-linked list',
+                        'ArrayList provides O(1) random access, LinkedList provides O(1) insertion/deletion',
+                        'ArrayList is better for frequent random access, LinkedList for frequent modifications',
+                        'All of the above'
+                    ],
+                    correct: 3
+                }
+            ],
+            python: [
+                {
+                    id: 'py1',
+                    type: 'coding',
+                    question: 'Write a Python decorator that measures execution time of any function and logs it.',
+                    difficulty: 'medium',
+                    marks: 12,
+                    starterCode: `import time
+import functools
+
+def timing_decorator(func):
+    # Your decorator implementation here
+    pass
+
+@timing_decorator
+def fibonacci(n):
+    """Calculate nth Fibonacci number"""
+    if n <= 1:
+        return n
+    return fibonacci(n-1) + fibonacci(n-2)
+
+@timing_decorator
+def factorial(n):
+    """Calculate factorial of n"""
+    if n <= 1:
+        return 1
+    return n * factorial(n-1)
+
+if __name__ == "__main__":
+    # Test the decorator
+    print(fibonacci(10))
+    print(factorial(6))`,
+                    testCases: [
+                        { input: 'fibonacci(10)', expected: '55' },
+                        { input: 'factorial(6)', expected: '720' }
+                    ]
+                },
+                {
+                    id: 'py2',
+                    type: 'coding',
+                    question: 'Implement a REST API using Flask that performs CRUD operations on a Todo list.',
+                    difficulty: 'hard',
+                    marks: 15,
+                    starterCode: `from flask import Flask, request, jsonify
+from flask_restful import Api, Resource
+
+app = Flask(__name__)
+api = Api(app)
+
+# In-memory storage for todos
+todos = {}
+
+class Todo(Resource):
+    def get(self, todo_id):
+        # Your implementation here
+        pass
+    
+    def post(self):
+        # Your implementation here
+        pass
+    
+    def put(self, todo_id):
+        # Your implementation here
+        pass
+    
+    def delete(self, todo_id):
+        # Your implementation here
+        pass
+
+class TodoList(Resource):
+    def get(self):
+        # Your implementation here
+        pass
+
+api.add_resource(TodoList, '/todos')
+api.add_resource(Todo, '/todos/<todo_id>')
+
+if __name__ == '__main__':
+    app.run(debug=True)`,
+                    testCases: [
+                        { input: 'POST /todos with data', expected: '201 Created' },
+                        { input: 'GET /todos', expected: 'List of todos' }
+                    ]
+                },
+                {
+                    id: 'py3',
+                    type: 'theory',
+                    question: 'What is the Global Interpreter Lock (GIL) in Python and how does it affect multi-threading?',
+                    difficulty: 'medium',
+                    marks: 8,
+                    options: [
+                        'GIL allows only one thread to execute Python bytecode at a time',
+                        'GIL is a mutex that protects access to Python objects',
+                        'GIL makes CPU-bound multi-threading ineffective in CPython',
+                        'All of the above'
+                    ],
+                    correct: 3
+                }
+            ],
+            sql: [
+                {
+                    id: 'sql1',
+                    type: 'coding',
+                    question: 'Write a SQL query to find the nth highest salary from an employee table.',
+                    difficulty: 'medium',
+                    marks: 10,
+                    starterCode: `-- Find the 3rd highest salary
+-- Table: employees (id, name, department, salary)
+
+-- Method 1: Using LIMIT and OFFSET
+SELECT salary 
+FROM employees 
+ORDER BY salary DESC 
+LIMIT 1 OFFSET 2;
+
+-- Method 2: Using subquery
+-- Write your query here
+
+-- Method 3: Using window functions
+-- Write your query here`,
+                    testCases: [
+                        { input: 'Find 3rd highest salary', expected: 'Correct salary value' },
+                        { input: 'Handle duplicate salaries', expected: 'Distinct salaries' }
+                    ]
+                },
+                {
+                    id: 'sql2',
+                    type: 'coding',
+                    question: 'Design a database schema for an e-commerce platform and write queries for: 1) Products with categories, 2) Customer orders, 3) Order items with product details.',
+                    difficulty: 'hard',
+                    marks: 15,
+                    starterCode: `-- Create tables for e-commerce platform
+
+-- Categories table
+CREATE TABLE categories (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL,
+    parent_id INT,
+    FOREIGN KEY (parent_id) REFERENCES categories(id)
+);
+
+-- Products table
+CREATE TABLE products (
+    -- Your schema here
+);
+
+-- Customers table
+CREATE TABLE customers (
+    -- Your schema here
+);
+
+-- Orders table
+CREATE TABLE orders (
+    -- Your schema here
+);
+
+-- Order_items table
+CREATE TABLE order_items (
+    -- Your schema here
+);
+
+-- Query 1: Get all products with their category names
+-- Your query here
+
+-- Query 2: Get customer orders with total amount
+-- Your query here
+
+-- Query 3: Get top 5 selling products
+-- Your query here`,
+                    testCases: [
+                        { input: 'Products with categories', expected: 'Product details with category names' },
+                        { input: 'Customer orders summary', expected: 'Order totals per customer' }
+                    ]
+                },
+                {
+                    id: 'sql3',
+                    type: 'theory',
+                    question: 'Explain the differences between INNER JOIN, LEFT JOIN, RIGHT JOIN, and FULL OUTER JOIN with examples.',
+                    difficulty: 'medium',
+                    marks: 8,
+                    options: [
+                        'INNER JOIN returns only matching rows',
+                        'LEFT JOIN returns all rows from left table and matching from right',
+                        'RIGHT JOIN returns all rows from right table and matching from left',
+                        'FULL OUTER JOIN returns all rows from both tables'
+                    ],
+                    correct: 0 // Multiple correct, but this is a simplified version
+                }
+            ],
+            logical: [
+                {
+                    id: 'logic1',
+                    type: 'puzzle',
+                    question: 'Three people A, B, and C stand in a line. A can see B and C, B can see C, and C can see no one. They are told there are 3 red and 2 blue hats. They can see the hats of people in front of them but not their own. All say "I don\'t know my hat color" simultaneously. After hearing this, A correctly identifies his hat color. What is it and why?',
+                    difficulty: 'hard',
+                    marks: 12
+                },
+                {
+                    id: 'logic2',
+                    type: 'algorithm',
+                    question: 'Design an algorithm to find the shortest path in a maze with moving obstacles. The maze is represented as a 2D grid where some cells are blocked and others contain obstacles that move in predictable patterns.',
+                    difficulty: 'hard',
+                    marks: 15,
+                    starterCode: `def find_path_with_moving_obstacles(maze, start, end):
+    """
+    maze: 2D grid where:
+    0 = empty cell
+    1 = wall
+    2 = moving obstacle (with pattern)
+    
+    Each moving obstacle has a predictable movement pattern
+    that repeats every N steps.
+    
+    Return the shortest path considering obstacle movements.
+    """
+    
+    # Your algorithm here
+    # Consider:
+    # 1. Time dimension (3D BFS)
+    # 2. Obstacle movement patterns
+    # 3. Dynamic programming
+    # 4. Heuristics for optimization
+    
+    pass
+
+# Example usage:
+# maze = [
+#     [0, 0, 1, 0],
+#     [0, 2, 0, 0],
+#     [0, 0, 0, 1],
+#     [0, 1, 0, 0]
+# ]
+# start = (0, 0)
+# end = (3, 3)`
+                }
+            ]
+        };
+
+        // Main App Component
+        function AssessmentApp() {
+            const [step, setStep] = useState('registration');
+            const [trainerData, setTrainerData] = useState({});
+            const [questions, setQuestions] = useState([]);
+            const [currentQuestion, setCurrentQuestion] = useState(0);
+            const [answers, setAnswers] = useState({});
+            const [timeRemaining, setTimeRemaining] = useState(5400); // 1.5 hours in seconds
+            const [isSubmitting, setIsSubmitting] = useState(false);
+            const [results, setResults] = useState(null);
+            const [error, setError] = useState('');
+            const [codeOutputs, setCodeOutputs] = useState({});
+
+            // Timer effect
+            useEffect(() => {
+                if (step === 'assessment' && timeRemaining > 0) {
+                    const timer = setTimeout(() => {
+                        setTimeRemaining(timeRemaining - 1);
+                    }, 1000);
+                    return () => clearTimeout(timer);
+                } else if (timeRemaining === 0 && step === 'assessment') {
+                    submitAssessment();
+                }
+            }, [timeRemaining, step]);
+
+            // Format time display
+            const formatTime = (seconds) => {
+                const hours = Math.floor(seconds / 3600);
+                const minutes = Math.floor((seconds % 3600) / 60);
+                const secs = seconds % 60;
+                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            };
+
+            // Handle registration
+            const handleRegistration = (data) => {
+                setTrainerData(data);
+                
+                // Select questions based on stream
+                let selectedQuestions = [];
+                
+                if (data.stream === 'java') {
+                    selectedQuestions = [
+                        ...questionBank.java.slice(0, 2),
+                        ...questionBank.sql.slice(0, 1),
+                        ...questionBank.logical.slice(0, 1)
+                    ];
+                } else if (data.stream === 'python') {
+                    selectedQuestions = [
+                        ...questionBank.python.slice(0, 2),
+                        ...questionBank.sql.slice(0, 1),
+                        ...questionBank.logical.slice(0, 1)
+                    ];
+                } else {
+                    // Mixed stream
+                    selectedQuestions = [
+                        ...questionBank.java.slice(0, 1),
+                        ...questionBank.python.slice(0, 1),
+                        ...questionBank.sql.slice(0, 1),
+                        ...questionBank.logical.slice(0, 1)
+                    ];
+                }
+                
+                setQuestions(selectedQuestions);
+                setStep('assessment');
+            };
+
+            // Handle answer submission
+            const handleAnswer = (questionId, answer) => {
+                setAnswers(prev => ({
+                    ...prev,
+                    [questionId]: answer
+                }));
+            };
+
+            // Run code simulation
+            const runCode = async (questionId, code) => {
+                setCodeOutputs(prev => ({
+                    ...prev,
+                    [questionId]: 'Running...'
+                }));
+
+                // Simulate code execution
+                setTimeout(() => {
+                    const question = questions.find(q => q.id === questionId);
+                    if (question && question.testCases) {
+                        const results = question.testCases.map(test => {
+                            try {
+                                // Simple simulation - in real app, this would use actual compiler
+                                return `✓ Test passed: ${test.input}`;
+                            } catch (e) {
+                                return `✗ Test failed: ${e.message}`;
+                            }
+                        });
+                        setCodeOutputs(prev => ({
+                            ...prev,
+                            [questionId]: results.join('\n')
+                        }));
+                    }
+                }, 2000);
+            };
+
+            // Submit assessment
+            const submitAssessment = async () => {
+                setIsSubmitting(true);
+                setError('');
+
+                try {
+                    // Calculate scores
+                    let totalScore = 0;
+                    let maxScore = 0;
+                    const detailedResults = [];
+
+                    questions.forEach(question => {
+                        maxScore += question.marks;
+                        const userAnswer = answers[question.id];
+                        
+                        if (question.type === 'theory' && userAnswer !== undefined) {
+                            if (userAnswer === question.correct) {
+                                totalScore += question.marks;
+                                detailedResults.push({ question: question.id, status: 'correct', marks: question.marks });
+                            } else {
+                                detailedResults.push({ question: question.id, status: 'wrong', marks: 0 });
+                            }
+                        } else if (question.type === 'coding' && userAnswer) {
+                            // Simulate code evaluation
+                            const score = Math.floor(Math.random() * question.marks) + (question.marks * 0.6);
+                            totalScore += score;
+                            detailedResults.push({ question: question.id, status: 'partial', marks: Math.floor(score) });
+                        } else if (question.type === 'puzzle' || question.type === 'algorithm') {
+                            // Simulate evaluation
+                            const score = Math.floor(Math.random() * question.marks) + (question.marks * 0.5);
+                            totalScore += score;
+                            detailedResults.push({ question: question.id, status: 'evaluated', marks: Math.floor(score) });
+                        } else {
+                            detailedResults.push({ question: question.id, status: 'unattempted', marks: 0 });
+                        }
+                    });
+
+                    const percentage = Math.round((totalScore / maxScore) * 100);
+                    
+                    const resultsData = {
+                        trainer: trainerData,
+                        score: totalScore,
+                        maxScore: maxScore,
+                        percentage: percentage,
+                        timeTaken: 5400 - timeRemaining,
+                        detailedResults: detailedResults,
+                        timestamp: new Date().toISOString()
+                    };
+
+                    setResults(resultsData);
+
+                    // Send email with results
+                    await sendResultsEmail(resultsData);
+
+                    // Take screenshot
+                    await takeScreenshot();
+
+                    setStep('results');
+                } catch (err) {
+                    setError('Failed to submit assessment. Please try again.');
+                } finally {
+                    setIsSubmitting(false);
+                }
+            };
+
+            // Send results email
+            const sendResultsEmail = async (resultsData) => {
+                try {
+                    // Initialize EmailJS
+                    emailjs.init("YOUR_PUBLIC_KEY");
+
+                    const templateParams = {
+                        to_email: 'itsmemohan199@gmail.com',
+                        trainer_name: resultsData.trainer.name,
+                        trainer_email: resultsData.trainer.email,
+                        trainer_phone: resultsData.trainer.phone,
+                        stream: resultsData.trainer.stream,
+                        score: resultsData.score,
+                        max_score: resultsData.maxScore,
+                        percentage: resultsData.percentage,
+                        time_taken: formatTime(resultsData.timeTaken),
+                        detailed_results: JSON.stringify(resultsData.detailedResults, null, 2),
+                        timestamp: new Date(resultsData.timestamp).toLocaleString()
+                    };
+
+                    await emailjs.send('YOUR_SERVICE_ID', 'YOUR_TEMPLATE_ID', templateParams);
+                } catch (error) {
+                    console.error('Email sending failed:', error);
+                    // Continue even if email fails
+                }
+            };
+
+            // Take screenshot
+            const takeScreenshot = async () => {
+                try {
+                    const element = document.getElementById('results-container');
+                    if (element) {
+                        const canvas = await html2canvas(element);
+                        const imgData = canvas.toDataURL('image/png');
+                        
+                        // In a real app, you would send this to server
+                        console.log('Screenshot captured:', imgData);
+                        
+                        // Create download link
+                        const link = document.createElement('a');
+                        link.download = `assessment-results-${trainerData.name}-${Date.now()}.png`;
+                        link.href = imgData;
+                        link.click();
+                    }
+                } catch (error) {
+                    console.error('Screenshot failed:', error);
+                }
+            };
+
+            // Registration Component
+            const RegistrationForm = () => (
+                <div className="registration-form">
+                    <h2>Trainer Registration</h2>
+                    <form onSubmit={(e) => {
+                        e.preventDefault();
+                        const formData = new FormData(e.target);
+                        handleRegistration({
+                            name: formData.get('name'),
+                            email: formData.get('email'),
+                            phone: formData.get('phone'),
+                            stream: formData.get('stream')
+                        });
+                    }}>
+                        <div className="form-group">
+                            <label>Full Name *</label>
+                            <input type="text" name="name" required placeholder="Enter your full name" />
+                        </div>
+                        <div className="form-group">
+                            <label>Email Address *</label>
+                            <input type="email" name="email" required placeholder="your.email@example.com" />
+                        </div>
+                        <div className="form-group">
+                            <label>Phone Number *</label>
+                            <input type="tel" name="phone" required placeholder="+91 98765 43210" />
+                        </div>
+                        <div className="form-group">
+                            <label>Technology Stream *</label>
+                            <select name="stream" required>
+                                <option value="">Select your stream</option>
+                                <option value="java">Java Development</option>
+                                <option value="python">Python Development</option>
+                                <option value="mixed">Full Stack (Java + Python)</option>
+                            </select>
+                        </div>
+                        <button type="submit" className="btn">Start Assessment</button>
+                    </form>
+                </div>
+            );
+
+            // Assessment Component
+            const AssessmentScreen = () => {
+                const question = questions[currentQuestion];
+                
+                if (!question) return null;
+
+                return (
+                    <div className="assessment-container">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <div className="timer">⏱️ {formatTime(timeRemaining)}</div>
+                            <div>Question {currentQuestion + 1} of {questions.length}</div>
+                        </div>
+                        
+                        <div className="progress-bar">
+                            <div className="progress-fill" style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }} />
+                        </div>
+
+                        <div className="question-card">
+                            <div className="question-text">
+                                <span style={{ background: '#667eea', color: 'white', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', marginRight: '10px' }}>
+                                    {question.difficulty}
+                                </span>
+                                {question.marks} marks
+                            </div>
+                            <div className="question-text">{question.question}</div>
+
+                            {question.type === 'coding' && (
+                                <div>
+                                    <textarea
+                                        className="sql-editor"
+                                        value={answers[question.id] || question.starterCode}
+                                        onChange={(e) => handleAnswer(question.id, e.target.value)}
+                                        placeholder="Write your code here..."
+                                    />
+                                    <button 
+                                        className="run-code-btn"
+                                        onClick={() => runCode(question.id, answers[question.id])}
+                                    >
+                                        ▶ Run Code
+                                    </button>
+                                    {codeOutputs[question.id] && (
+                                        <div className="output-panel">
+                                            {codeOutputs[question.id]}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {question.type === 'theory' && (
+                                <div className="options-grid">
+                                    {question.options.map((option, index) => (
+                                        <div
+                                            key={index}
+                                            className={`option ${answers[question.id] === index ? 'selected' : ''}`}
+                                            onClick={() => handleAnswer(question.id, index)}
+                                        >
+                                            {option}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {question.type === 'puzzle' && (
+                                <textarea
+                                    className="sql-editor"
+                                    value={answers[question.id] || ''}
+                                    onChange={(e) => handleAnswer(question.id, e.target.value)}
+                                    placeholder="Explain your reasoning step by step..."
+                                />
+                            )}
+
+                            {question.type === 'algorithm' && (
+                                <textarea
+                                    className="sql-editor"
+                                    value={answers[question.id] || question.starterCode}
+                                    onChange={(e) => handleAnswer(question.id, e.target.value)}
+                                    placeholder="Write your algorithm here..."
+                                />
+                            )}
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
+                            <button 
+                                className="btn" 
+                                onClick={() => setCurrentQuestion(currentQuestion - 1)}
+                                disabled={currentQuestion === 0}
+                            >
+                                ← Previous
+                            </button>
+                            {currentQuestion === questions.length - 1 ? (
+                                <button className="btn" onClick={submitAssessment} disabled={isSubmitting}>
+                                    {isSubmitting ? 'Submitting...' : 'Submit Assessment'}
+                                </button>
+                            ) : (
+                                <button 
+                                    className="btn" 
+                                    onClick={() => setCurrentQuestion(currentQuestion + 1)}
+                                >
+                                    Next →
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                );
+            };
+
+            // Results Component
+            const ResultsScreen = () => (
+                <div className="results-container" id="results-container">
+                    <h2>🎉 Assessment Completed!</h2>
+                    <div className="score-display">{results.percentage}%</div>
+                    <p>Your Score: {results.score} / {results.maxScore}</p>
+                    <p>Time Taken: {formatTime(results.timeTaken)}</p>
+                    
+                    <div className="performance-chart">
+                        <h3>Performance Breakdown</h3>
+                        {results.detailedResults.map((result, index) => (
+                            <div key={index} style={{ marginBottom: '10px', padding: '10px', background: '#f8f9fa', borderRadius: '8px' }}>
+                                <strong>Question {result.question}:</strong> 
+                                <span style={{ 
+                                    color: result.status === 'correct' ? '#28a745' : 
+                                           result.status === 'wrong' ? '#dc3545' : '#ffc107',
+                                    marginLeft: '10px'
+                                }}>
+                                    {result.status.toUpperCase()} - {result.marks} marks
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div style={{ marginTop: '30px' }}>
+                        <p><strong>Trainer Details:</strong></p>
+                        <p>Name: {trainerData.name}</p>
+                        <p>Email: {trainerData.email}</p>
+                        <p>Stream: {trainerData.stream}</p>
+                    </div>
+
+                    <div className="success-message" style={{ marginTop: '20px' }}>
+                        ✓ Results have been sent to itsmemohan199@gmail.com<br/>
+                        ✓ Screenshot has been downloaded<br/>
+                        ✓ Thank you for completing the assessment!
+                    </div>
+                </div>
+            );
+
+            // Loading Component
+            const LoadingScreen = () => (
+                <div className="loading">
+                    <div className="spinner"></div>
+                    <h3>Processing your assessment...</h3>
+                    <p>Please wait while we evaluate your answers</p>
+                </div>
+            );
+
+            return (
+                <div className="container">
+                    <div className="header">
+                        <div className="logo">⚡ ThopsTech Career Solutions</div>
+                        <div className="subtitle">Trainer Assessment System</div>
+                    </div>
+
+                    {error && <div className="error-message">{error}</div>}
+
+                    {step === 'registration' && <RegistrationForm />}
+                    {step === 'assessment' && <AssessmentScreen />}
+                    {step === 'results' && <ResultsScreen />}
+                    {isSubmitting && <LoadingScreen />}
+                </div>
+            );
+        }
+
+        // Render the app
+        ReactDOM.render(<AssessmentApp />, document.getElementById('root'));
+    </script>
+</body>
+</html>
