@@ -4,8 +4,7 @@ import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, Legend, CartesianGrid,
   ResponsiveContainer, AreaChart, Area, RadarChart,
-  Radar, PolarGrid, PolarAngleAxis, ComposedChart,
-  ScatterChart, Scatter
+  Radar, PolarGrid, PolarAngleAxis, ComposedChart
 } from "recharts";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
